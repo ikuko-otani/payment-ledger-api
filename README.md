@@ -1,1 +1,1 @@
-# payment-ledger-api
+Double-entry ledger API built with FastAPI
