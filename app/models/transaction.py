@@ -4,6 +4,7 @@ One Transaction links to two or more Entry rows (debit + credit).
 Balance rule (debit_sum == credit_sum) is enforced at the DB level
 via a CHECK constraint added in the S1-2 Alembic migration.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -49,7 +50,17 @@ class Transaction(Base):
     # TODO: entries リレーションを定義する
     #   ヒント: Mapped[list["Entry"]], back_populates="transaction",
     #           cascade="all, delete-orphan"
-    entries: Mapped[list["Entry"]]
+    entries: Mapped[list["Entry"]] = relationship(
+        # back_populates を設定
+        # entry.py で定義した属性名
+        back_populates="transaction",
+        # cascade を設定
+        # 親Transactionを消したらEntryも消えてほしい
+        cascade="all, delete-orphan",
+        # lazy loading の設定
+        # "select" でOK、デフォルト値
+        lazy="select",
+    )
 
     def __repr__(self) -> str:
         return (
