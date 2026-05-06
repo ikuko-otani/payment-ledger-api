@@ -5,16 +5,24 @@ total debit amount equals total credit amount (double-entry rule).
 Row-level CHECK ensures debit_amount and credit_amount are non-negative
 and exactly one of them is non-zero per row.
 """
+
 from __future__ import annotations
 
 import enum
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.transaction import Transaction
+    from app.models.account import Account
 
 
 class EntryType(str, enum.Enum):
@@ -49,8 +57,10 @@ class Entry(Base):
         nullable=False,
         index=True,
     )
-    # TODO: entry_type を EntryType Enum で定義する（ヒント: Mapped[EntryType]）
-    entry_type: Mapped[EntryType]
+    entry_type: Mapped[EntryType] = mapped_column(
+        Enum(EntryType),
+        nullable=False,
+    )
     amount: Mapped[Decimal] = mapped_column(
         Numeric(precision=18, scale=4),
         nullable=False,
