@@ -1,8 +1,12 @@
 import os
+from dotenv import load_dotenv
+
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+
+load_dotenv()  # ← これがないと .env が読まれない
 
 # 📋 Alembic Config object
 config = context.config
@@ -25,7 +29,12 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Read DATABASE_URL from environment variable."""
     # TODO: ここを実装（ヒント: os.environ.get("DATABASE_URL", "") を返す）
-    return os.environ.get("DATABASE_URL", "")
+    # asyncpg は Alembic では使えないため同期ドライバに変換する
+    url = os.environ.get(
+        "DATABASE_URL", "postgresql+psycopg://ledger_user:password@db:5432/ledger_db"
+    )
+    # asyncpg is for async SQLAlchemy; Alembic needs a sync driver
+    return url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
 
 
 def run_migrations_offline() -> None:
