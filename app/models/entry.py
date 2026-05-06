@@ -2,27 +2,23 @@
 
 One Transaction must have at least two Entry rows whose
 total debit amount equals total credit amount (double-entry rule).
-Row-level CHECK ensures debit_amount and credit_amount are non-negative
-and exactly one of them is non-zero per row.
+Row-level CHECK ensures amount is positive.
 """
-
 from __future__ import annotations
 
 import enum
 import uuid
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, Enum
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-from __future__ import annotations
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
-    from app.models.transaction import Transaction
     from app.models.account import Account
+    from app.models.transaction import Transaction
 
 
 class EntryType(str, enum.Enum):
@@ -38,8 +34,6 @@ class Entry(Base):
     __tablename__ = "entries"
     __table_args__ = (
         # 💡 Row-level guard: amount must be positive.
-        #    Transaction-level balance (debit_sum == credit_sum) is enforced
-        #    by the Alembic migration via a DB-level CHECK on the transactions table.
         CheckConstraint("amount > 0", name="ck_entries_amount_positive"),
     )
 
@@ -70,7 +64,7 @@ class Entry(Base):
     transaction: Mapped[Transaction] = relationship(
         back_populates="entries",
     )
-    account: Mapped["Account"] = relationship()
+    account: Mapped[Account] = relationship()
 
     def __repr__(self) -> str:
         return (
