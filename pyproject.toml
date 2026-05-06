@@ -8,6 +8,8 @@ dependencies = [
   "asyncpg>=0.29",
   "alembic>=1.13",
   "pydantic-settings>=2.3",
+  "psycopg>=3.3.4",
+  "python-dotenv>=1.2.2",
 ]
 
 [dependency-groups]
@@ -19,3 +21,6 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.uv]
+link-mode = "copy"

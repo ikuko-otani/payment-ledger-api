@@ -1,0 +1,74 @@
+import os
+from dotenv import load_dotenv
+
+from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config, pool
+from alembic import context
+
+load_dotenv()  # ← これがないと .env が読まれない
+
+# 📋 Alembic Config object
+config = context.config
+
+# 📋 Setup loggers from alembic.ini
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# 🔧 Import Base so Alembic can detect models automatically.
+# TODO: ここを実装（ヒント: app.db.base から Base を import し、
+#       target_metadata に Base.metadata を代入する）
+from app.db.base import Base  # noqa: E402
+
+# Import all models so their tables are registered on Base.metadata
+import app.models  # noqa: F401, E402
+
+target_metadata = Base.metadata
+
+
+def get_url() -> str:
+    """Read DATABASE_URL from environment variable."""
+    # TODO: ここを実装（ヒント: os.environ.get("DATABASE_URL", "") を返す）
+    # asyncpg は Alembic では使えないため同期ドライバに変換する
+    url = os.environ.get(
+        "DATABASE_URL", "postgresql+psycopg://ledger_user:password@db:5432/ledger_db"
+    )
+    # asyncpg is for async SQLAlchemy; Alembic needs a sync driver
+    return url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode (no live DB connection needed)."""
+    url = get_url()
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode (live DB connection)."""
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = get_url()
+    connectable = engine_from_config(
+        configuration,
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
