@@ -9,13 +9,12 @@ from pydantic import BaseModel
 
 from app.models.account import AccountType
 
-
 # ---------------------------------------------------------------------------
 # Request schemas
 # ---------------------------------------------------------------------------
 
+
 class AccountCreate(BaseModel):
-    # ✍️ 自分で書く: name (str) と account_type (AccountType) を定義
     name: str
     account_type: AccountType
 
@@ -23,6 +22,7 @@ class AccountCreate(BaseModel):
 # ---------------------------------------------------------------------------
 # Response schemas
 # ---------------------------------------------------------------------------
+
 
 class AccountRead(BaseModel):
     id: uuid.UUID

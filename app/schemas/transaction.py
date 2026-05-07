@@ -14,13 +14,12 @@ from pydantic import BaseModel
 
 from app.models.entry import EntryType
 
-
 # ---------------------------------------------------------------------------
 # Entry sub-schemas
 # ---------------------------------------------------------------------------
 
+
 class EntryCreate(BaseModel):
-    # ✍️ 自分で書く: account_id (uuid.UUID), entry_type (EntryType), amount (Decimal) を定義
     account_id: uuid.UUID
     entry_type: EntryType
     amount: Decimal
@@ -38,6 +37,7 @@ class EntryRead(BaseModel):
 # ---------------------------------------------------------------------------
 # Transaction schemas
 # ---------------------------------------------------------------------------
+
 
 class TransactionCreate(BaseModel):
     description: str
