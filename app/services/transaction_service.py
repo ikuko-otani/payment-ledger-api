@@ -22,42 +22,41 @@ async def create_transaction(
 ) -> Transaction:
     """Validate double-entry balance and persist Transaction + Entries."""
 
-    # 🔧 穴埋め: debit / credit の合計を計算して等しくなければ 422 を返す
+    # debit / credit の合計を計算して等しくなければ 422 を返す
     debit_sum = sum(
         e.amount for e in payload.entries if e.entry_type == EntryType.DEBIT
     )
     credit_sum = sum(
-        # TODO: ここを実装（ヒント: entry_type == EntryType.CREDIT のものを sum）
-        e.amount for e in payload.entries if e.entry_type == EntryType.CREDIT
+        # entry_type == EntryType.CREDIT のものを sum
+        e.amount
+        for e in payload.entries
+        if e.entry_type == EntryType.CREDIT
     )
 
     if debit_sum != credit_sum:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Entries are not balanced: "
-                f"debit={debit_sum} credit={credit_sum}"
+                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
             ),
         )
 
-    # 🔧 穴埋め: Transaction オブジェクトを作成して db.add する
+    # Transaction オブジェクトを作成して db.add する
     transaction = Transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
-        # TODO: ここを実装（ヒント: payload.amount を渡す）
         amount=payload.amount,
     )
     db.add(transaction)
     # flush して transaction.id を確定させる（commit 前でも id が必要）
     await db.flush()
 
-    # 🔧 穴埋め: Entry オブジェクトのリストを作成して db.add_all する
+    # Entry オブジェクトのリストを作成して db.add_all する
     entries = [
         Entry(
             transaction_id=transaction.id,
             account_id=entry.account_id,
             entry_type=entry.entry_type,
-            # TODO: ここを実装（ヒント: entry.amount を渡す）
             amount=entry.amount,
         )
         for entry in payload.entries
