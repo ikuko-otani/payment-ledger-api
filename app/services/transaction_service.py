@@ -6,10 +6,11 @@ PostgreSQL CHECK cannot aggregate across rows, so we enforce here.
 
 from __future__ import annotations
 
-from decimal import Decimal
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entry import Entry, EntryType
 from app.models.transaction import Transaction
@@ -22,36 +23,30 @@ async def create_transaction(
 ) -> Transaction:
     """Validate double-entry balance and persist Transaction + Entries."""
 
-    # debit / credit の合計を計算して等しくなければ 422 を返す
     debit_sum = sum(
         e.amount for e in payload.entries if e.entry_type == EntryType.DEBIT
     )
     credit_sum = sum(
-        # entry_type == EntryType.CREDIT のものを sum
-        e.amount
-        for e in payload.entries
-        if e.entry_type == EntryType.CREDIT
+        e.amount for e in payload.entries if e.entry_type == EntryType.CREDIT
     )
 
     if debit_sum != credit_sum:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
+                f"Entries are not balanced: "
+                f"debit={debit_sum} credit={credit_sum}"
             ),
         )
 
-    # Transaction オブジェクトを作成して db.add する
     transaction = Transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
         amount=payload.amount,
     )
     db.add(transaction)
-    # flush して transaction.id を確定させる（commit 前でも id が必要）
     await db.flush()
 
-    # Entry オブジェクトのリストを作成して db.add_all する
     entries = [
         Entry(
             transaction_id=transaction.id,
@@ -64,6 +59,13 @@ async def create_transaction(
     db.add_all(entries)
     await db.flush()
 
-    # Reload entries so transaction.entries is populated before returning
-    await db.refresh(transaction)
-    return transaction
+    # Use selectinload to eagerly load entries within the open AsyncSession.
+    # db.refresh(transaction) alone only refreshes scalar columns; it does NOT
+    # load relationship attributes (lazy by default), causing MissingGreenlet
+    # when FastAPI serialises the response outside the session context.
+    result = await db.execute(
+        select(Transaction)
+        .where(Transaction.id == transaction.id)
+        .options(selectinload(Transaction.entries))
+    )
+    return result.scalar_one()
