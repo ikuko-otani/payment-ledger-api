@@ -19,11 +19,8 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 @router.get("", response_model=list[AccountRead])
 async def list_accounts(db: DbDep) -> list[Account]:
-    # 🔧 穴埋め: accounts テーブルを全件取得して返す
-    result = await db.execute(
-        # TODO: ここを実装（ヒント: select(Account)）
-        select(Account)
-    )
+    # accounts テーブルを全件取得して返す
+    result = await db.execute(select(Account))
     return list(result.scalars().all())
 
 
