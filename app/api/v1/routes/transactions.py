@@ -34,6 +34,5 @@ async def post_transaction(
     payload: TransactionCreate,
     db: DbDep,
 ) -> Transaction:
-    # 🔧 穴埋め: create_transaction サービスを呼び出して返す
-    # TODO: ここを実装（ヒント: await create_transaction(db, payload)）
+    # create_transaction サービスを呼び出して返す
     return await create_transaction(db, payload)
