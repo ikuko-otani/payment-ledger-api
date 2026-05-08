@@ -29,17 +29,15 @@ async def create_transaction(
     """Validate double-entry balance and persist Transaction + Entries."""
 
     # ------------------------------------------------------------------
-    # 🔧 Validate: all account_ids must exist in the accounts table
+    # Validate: all account_ids must exist in the accounts table
     # ------------------------------------------------------------------
     account_ids = {e.account_id for e in payload.entries}
-    # TODO: query the accounts table and check every account_id exists
     result = await db.execute(select(Account).where(Account.id.in_(account_ids)))
     found_ids = {row.id for row in result.scalars().all()}
     missing = account_ids - found_ids
     if missing:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            # Format missing ids into a readable string
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Unknown account_ids: {[str(i) for i in missing]}",
         )
 
@@ -55,9 +53,10 @@ async def create_transaction(
 
     if debit_sum != credit_sum:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
+                f"Entries are not balanced: "
+                f"debit={debit_sum} credit={credit_sum}"
             ),
         )
 
