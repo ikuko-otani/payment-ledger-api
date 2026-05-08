@@ -69,13 +69,13 @@ class TransactionCreate(BaseModel):
             raise ValueError("entries must have at least 2 items")
         return v
 
-    # ✍️ Validate that description is not blank (strip whitespace)
+    # Validate that description is not blank (strip whitespace)
     @field_validator("description")
     @classmethod
     def description_must_not_be_blank(cls, v: str) -> str:
-        # TODO: raise ValueError if v.strip() is empty
-        #   Hint: stripped = v.strip(); if not stripped: raise ValueError(...)
-        ...
+        # Raise ValueError if v.strip() is empty
+        if not v.strip():
+            raise ValueError("description must not be blank")
         return v
 
 
