@@ -144,3 +144,82 @@ async def test_transaction_response_shape_like_domain_object(
     assert len(tx.entries) == 2
     entry_types = {entry.entry_type for entry in tx.entries}
     assert entry_types == {EntryType.DEBIT, EntryType.CREDIT}
+
+
+# ---------------------------------------------------------------------------
+# New: S2-1 validation tests (schema layer)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_entry_amount_zero_raises_validation_error() -> None:
+    """amount=0 must be rejected by Pydantic schema."""
+    with pytest.raises(ValueError):
+        EntryCreate(
+            account_id="11111111-1111-1111-1111-111111111111",
+            entry_type=EntryType.DEBIT,
+            amount=Decimal("0"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_entry_amount_negative_raises_validation_error() -> None:
+    """amount < 0 must be rejected by Pydantic schema."""
+    with pytest.raises(ValueError):
+        EntryCreate(
+            account_id="11111111-1111-1111-1111-111111111111",
+            entry_type=EntryType.DEBIT,
+            amount=Decimal("-100"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_description_blank_raises_validation_error() -> None:
+    """Blank description must be rejected by Pydantic schema."""
+    with pytest.raises(ValueError):
+        TransactionCreate(
+            description="   ",
+            transaction_date=date(2024, 1, 1),
+            amount=Decimal("100.00"),
+            entries=[
+                EntryCreate(
+                    account_id="11111111-1111-1111-1111-111111111111",
+                    entry_type=EntryType.DEBIT,
+                    amount=Decimal("100.00"),
+                ),
+                EntryCreate(
+                    account_id="22222222-2222-2222-2222-222222222222",
+                    entry_type=EntryType.CREDIT,
+                    amount=Decimal("100.00"),
+                ),
+            ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_unknown_account_id_raises_http_422(
+    db_session: AsyncSession,
+) -> None:
+    """account_id not in accounts table must be rejected by service layer."""
+    payload = TransactionCreate(
+        description="Ghost account",
+        transaction_date=date(2024, 1, 1),
+        amount=Decimal("500.00"),
+        entries=[
+            EntryCreate(
+                account_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                entry_type=EntryType.DEBIT,
+                amount=Decimal("500.00"),
+            ),
+            EntryCreate(
+                account_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                entry_type=EntryType.CREDIT,
+                amount=Decimal("500.00"),
+            ),
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload)
+
+    assert exc_info.value.status_code == 422

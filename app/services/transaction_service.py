@@ -1,7 +1,11 @@
 """Transaction service — orchestrates DB writes and enforces double-entry rule.
 
-Double-entry rule: debit_sum == credit_sum.
-PostgreSQL CHECK cannot aggregate across rows, so we enforce here.
+Validation responsibilities:
+  - Double-entry balance : debit_sum == credit_sum  (enforced here)
+  - account_id existence : each entry.account_id must exist in accounts table
+  - Value shape          : delegated to Pydantic schemas (amount > 0, etc.)
+
+PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException, status
 
+from app.models.account import Account
 from app.models.entry import Entry, EntryType
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate
@@ -23,6 +28,24 @@ async def create_transaction(
 ) -> Transaction:
     """Validate double-entry balance and persist Transaction + Entries."""
 
+    # ------------------------------------------------------------------
+    # 🔧 Validate: all account_ids must exist in the accounts table
+    # ------------------------------------------------------------------
+    account_ids = {e.account_id for e in payload.entries}
+    # TODO: query the accounts table and check every account_id exists
+    result = await db.execute(select(Account).where(Account.id.in_(account_ids)))
+    found_ids = {row.id for row in result.scalars().all()}
+    missing = account_ids - found_ids
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            # Format missing ids into a readable string
+            detail=f"Unknown account_ids: {[str(i) for i in missing]}",
+        )
+
+    # ------------------------------------------------------------------
+    # Validate: double-entry balance
+    # ------------------------------------------------------------------
     debit_sum = sum(
         e.amount for e in payload.entries if e.entry_type == EntryType.DEBIT
     )
@@ -34,11 +57,13 @@ async def create_transaction(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Entries are not balanced: "
-                f"debit={debit_sum} credit={credit_sum}"
+                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
             ),
         )
 
+    # ------------------------------------------------------------------
+    # Persist
+    # ------------------------------------------------------------------
     transaction = Transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
