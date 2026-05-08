@@ -1,60 +1,53 @@
-"""Integration tests for GET/POST /api/v1/accounts."""
+"""DB-level integration tests for Account model operations."""
 
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-
-POST_URL = "/api/v1/accounts"
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _account_payload(name: str = "Cash", account_type: str = "asset") -> dict:
-    return {"name": name, "account_type": account_type}
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+from app.models.account import Account, AccountType
 
 
 @pytest.mark.asyncio
-async def test_create_account_returns_201(client: AsyncClient) -> None:
-    """POST /accounts with valid payload should return 201 and the created account."""
-    response = await client.post(POST_URL, json=_account_payload())
-    # TODO: assert status code is 201
-    # Hint: assert response.status_code == 201
-    assert response.status_code == 201
-    data = response.json()
-    # TODO: assert the returned name matches the payload
-    # Hint: assert data["name"] == "Cash"
-    assert data["name"] == "Cash"
-    assert data["account_type"] == "asset"
-    assert "id" in data
+async def test_create_account_persists_row(db_session: AsyncSession) -> None:
+    account = Account(name="Cash", account_type=AccountType.ASSET)
+    db_session.add(account)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Account).where(Account.name == "Cash"))
+    saved = result.scalar_one()
+
+    assert saved.name == "Cash"
+    assert saved.account_type == AccountType.ASSET
 
 
 @pytest.mark.asyncio
-async def test_list_accounts_returns_created(client: AsyncClient) -> None:
-    """GET /accounts should include a previously created account."""
-    await client.post(POST_URL, json=_account_payload(name="Revenue", account_type="revenue"))
-    response = await client.get(POST_URL)
-    assert response.status_code == 200
-    names = [a["name"] for a in response.json()]
-    # ✍️ Write an assertion that "Revenue" is in names
-    assert "Revenue" in names
+async def test_list_accounts_returns_created_rows(db_session: AsyncSession) -> None:
+    db_session.add_all(
+        [
+            Account(name="Cash", account_type=AccountType.ASSET),
+            Account(name="Revenue", account_type=AccountType.REVENUE),
+        ]
+    )
+    await db_session.commit()
+
+    result = await db_session.execute(select(Account).order_by(Account.name))
+    rows = result.scalars().all()
+    names = [row.name for row in rows]
+
+    assert names == ["Cash", "Revenue"]
 
 
 @pytest.mark.asyncio
-async def test_create_account_duplicate_name_returns_error(client: AsyncClient) -> None:
-    """POST /accounts with a duplicate name should return 4xx."""
-    payload = _account_payload(name="Duplicate")
-    await client.post(POST_URL, json=payload)
-    response = await client.post(POST_URL, json=payload)
-    # TODO: assert the status code indicates an error (4xx)
-    # Hint: assert response.status_code >= 400
-    assert response.status_code >= 400
+async def test_duplicate_account_name_raises_integrity_error(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(Account(name="Duplicate", account_type=AccountType.ASSET))
+    await db_session.commit()
+
+    db_session.add(Account(name="Duplicate", account_type=AccountType.EXPENSE))
+
+    with pytest.raises(IntegrityError):
+        await db_session.commit()

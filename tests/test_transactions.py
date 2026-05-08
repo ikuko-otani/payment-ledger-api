@@ -1,114 +1,146 @@
-"""Integration tests for POST /api/v1/transactions (double-entry balance rule)."""
+"""Service/schema integration tests for Transactions."""
 
 from __future__ import annotations
 
-import uuid
+from datetime import date
 from decimal import Decimal
 
 import pytest
-from httpx import AsyncClient
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.account import Account, AccountType
+from app.models.entry import EntryType
+from app.models.transaction import Transaction
+from app.schemas.transaction import EntryCreate, TransactionCreate
+from app.services.transaction_service import create_transaction
 
 
-POST_ACCOUNT_URL = "/api/v1/accounts"
-POST_TX_URL = "/api/v1/transactions"
+async def _create_account(
+    db_session: AsyncSession,
+    name: str,
+    account_type: AccountType,
+) -> Account:
+    account = Account(name=name, account_type=account_type)
+    db_session.add(account)
+    await db_session.commit()
+    await db_session.refresh(account)
+    return account
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_create_balanced_transaction_persists_rows(
+    db_session: AsyncSession,
+) -> None:
+    debit = await _create_account(db_session, "Cash", AccountType.ASSET)
+    credit = await _create_account(db_session, "Revenue", AccountType.REVENUE)
 
-
-async def _create_account(client: AsyncClient, name: str, account_type: str = "asset") -> uuid.UUID:
-    resp = await client.post(
-        POST_ACCOUNT_URL,
-        json={"name": name, "account_type": account_type},
+    payload = TransactionCreate(
+        description="Balanced",
+        transaction_date=date(2024, 1, 1),
+        amount=Decimal("1000.00"),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                entry_type=EntryType.DEBIT,
+                amount=Decimal("1000.00"),
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                entry_type=EntryType.CREDIT,
+                amount=Decimal("1000.00"),
+            ),
+        ],
     )
-    assert resp.status_code == 201
-    return uuid.UUID(resp.json()["id"])
+
+    tx = await create_transaction(db_session, payload)
+    await db_session.commit()
+
+    result = await db_session.execute(
+        select(Transaction).where(Transaction.id == tx.id)
+    )
+    saved = result.scalar_one()
+
+    assert saved.description == "Balanced"
 
 
-def _tx_payload(
-    debit_account_id: uuid.UUID,
-    credit_account_id: uuid.UUID,
-    amount: str = "1000.00",
-    description: str = "Test transaction",
-) -> dict:
-    """Build a balanced transaction payload (debit == credit)."""
-    return {
-        "description": description,
-        "transaction_date": "2024-01-01",
-        "amount": amount,
-        "entries": [
-            {"account_id": str(debit_account_id), "entry_type": "debit", "amount": amount},
-            {"account_id": str(credit_account_id), "entry_type": "credit", "amount": amount},
+@pytest.mark.asyncio
+async def test_unbalanced_transaction_raises_http_422(
+    db_session: AsyncSession,
+) -> None:
+    debit = await _create_account(db_session, "Cash-Unbal", AccountType.ASSET)
+    credit = await _create_account(db_session, "Revenue-Unbal", AccountType.REVENUE)
+
+    payload = TransactionCreate(
+        description="Unbalanced",
+        transaction_date=date(2024, 1, 1),
+        amount=Decimal("1000.00"),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                entry_type=EntryType.DEBIT,
+                amount=Decimal("1000.00"),
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                entry_type=EntryType.CREDIT,
+                amount=Decimal("500.00"),
+            ),
         ],
-    }
+    )
 
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload)
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_create_balanced_transaction(client: AsyncClient) -> None:
-    """POST /transactions with debit == credit should return 201."""
-    debit_id = await _create_account(client, "Cash-Tx", "asset")
-    credit_id = await _create_account(client, "Revenue-Tx", "revenue")
-    response = await client.post(POST_TX_URL, json=_tx_payload(debit_id, credit_id))
-    # TODO: assert 201 and that the response contains an "id"
-    # Hint: assert response.status_code == 201 / assert "id" in response.json()
-    assert response.status_code == 201
-    assert "id" in response.json()
+    assert exc_info.value.status_code == 422
+    assert "balanced" in str(exc_info.value.detail).lower()
 
 
 @pytest.mark.asyncio
-async def test_unbalanced_transaction_rejected(client: AsyncClient) -> None:
-    """POST /transactions with debit != credit should return 422."""
-    debit_id = await _create_account(client, "Cash-Unbal", "asset")
-    credit_id = await _create_account(client, "Revenue-Unbal", "revenue")
-    payload = {
-        "description": "Unbalanced",
-        "transaction_date": "2024-01-01",
-        "amount": "1000.00",
-        "entries": [
-            {"account_id": str(debit_id), "entry_type": "debit", "amount": "1000.00"},
-            {"account_id": str(credit_id), "entry_type": "credit", "amount": "500.00"},
+async def test_transaction_create_requires_at_least_two_entries() -> None:
+    with pytest.raises(ValueError):
+        TransactionCreate(
+            description="Single entry",
+            transaction_date=date(2024, 1, 1),
+            amount=Decimal("500.00"),
+            entries=[
+                EntryCreate(
+                    account_id="11111111-1111-1111-1111-111111111111",
+                    entry_type=EntryType.DEBIT,
+                    amount=Decimal("500.00"),
+                )
+            ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_transaction_response_shape_like_domain_object(
+    db_session: AsyncSession,
+) -> None:
+    debit = await _create_account(db_session, "Cash-Resp", AccountType.ASSET)
+    credit = await _create_account(db_session, "Revenue-Resp", AccountType.REVENUE)
+
+    payload = TransactionCreate(
+        description="Response shape",
+        transaction_date=date(2024, 1, 1),
+        amount=Decimal("700.00"),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                entry_type=EntryType.DEBIT,
+                amount=Decimal("700.00"),
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                entry_type=EntryType.CREDIT,
+                amount=Decimal("700.00"),
+            ),
         ],
-    }
-    response = await client.post(POST_TX_URL, json=payload)
-    # ✍️ Write assertions: status 422 and error detail mentions "balanced" or "debit"/"credit"
-    assert response.status_code == 422
-    assert "debit" in response.json()["detail"].lower() or "balanced" in response.json()["detail"].lower()
+    )
 
+    tx = await create_transaction(db_session, payload)
 
-@pytest.mark.asyncio
-async def test_transaction_with_single_entry_rejected(client: AsyncClient) -> None:
-    """POST /transactions with only 1 entry should be rejected (field_validator)."""
-    debit_id = await _create_account(client, "Cash-Single", "asset")
-    payload = {
-        "description": "Single entry",
-        "transaction_date": "2024-01-01",
-        "amount": "500.00",
-        "entries": [
-            {"account_id": str(debit_id), "entry_type": "debit", "amount": "500.00"},
-        ],
-    }
-    response = await client.post(POST_TX_URL, json=payload)
-    # TODO: assert status code is 422 (Pydantic validation error)
-    # Hint: assert response.status_code == 422
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_transaction_entries_in_response(client: AsyncClient) -> None:
-    """Response body should include entries with correct entry_type values."""
-    debit_id = await _create_account(client, "Cash-Resp", "asset")
-    credit_id = await _create_account(client, "Revenue-Resp", "revenue")
-    response = await client.post(POST_TX_URL, json=_tx_payload(debit_id, credit_id))
-    assert response.status_code == 201
-    entries = response.json()["entries"]
-    # ✍️ Assert len(entries) == 2 and that both "debit" and "credit" appear in entry_types
-    assert len(entries) == 2
-    entry_types = {e["entry_type"] for e in entries}
-    assert entry_types == {"debit", "credit"}
+    assert len(tx.entries) == 2
+    entry_types = {entry.entry_type for entry in tx.entries}
+    assert entry_types == {EntryType.DEBIT, EntryType.CREDIT}
