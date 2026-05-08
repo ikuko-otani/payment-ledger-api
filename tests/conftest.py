@@ -49,15 +49,16 @@ def event_loop_policy():
 
 
 @pytest_asyncio.fixture(scope="session")
-async def engine(postgres_container: PostgresContainer) -> AsyncGenerator[AsyncEngine, None]:
+async def engine(
+    postgres_container: PostgresContainer,
+) -> AsyncGenerator[AsyncEngine, None]:
     """Create async engine and run Alembic migrations once per session."""
     # TODO: build the asyncpg URL from postgres_container and create the engine
     # Hint: postgres_container.get_connection_url() returns a psycopg2 URL.
     #       Replace the scheme with "postgresql+asyncpg" to get an asyncpg URL.
-    #       Example:
-    #         sync_url  = postgres_container.get_connection_url()
-    #         async_url = sync_url.replace("psycopg2", "asyncpg", 1)
-    #                              .replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    # --- (1) engine fixture ---
+    # testcontainersのURLをasyncpg形式に変換してAlembicマイグレーションを実行
     sync_url = postgres_container.get_connection_url()
     async_url = sync_url.replace("psycopg2", "asyncpg", 1).replace(
         "postgresql://", "postgresql+asyncpg://", 1
@@ -84,17 +85,14 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Provide a transactional AsyncSession that rolls back after each test."""
     # TODO: open a connection, begin a SAVEPOINT transaction, yield the session,
     #       then rollback so each test starts from a clean state.
-    # Hint:
-    #   async with engine.connect() as conn:
-    #       await conn.begin()        ← outer transaction
-    #       session = AsyncSession(bind=conn, expire_on_commit=False)
-    #       yield session
-    #       await conn.rollback()     ← undo everything after the test
+
+    # --- (2) db_session fixture ---
+    # トランザクションを開いてテスト後にROLLBACKする（DBを汚さない）
     async with engine.connect() as conn:
-        await conn.begin()
+        await conn.begin()  # ← outer transaction
         session = AsyncSession(bind=conn, expire_on_commit=False)
         yield session
-        await conn.rollback()
+        await conn.rollback()  # ← undo everything after the test
 
 
 @pytest_asyncio.fixture()

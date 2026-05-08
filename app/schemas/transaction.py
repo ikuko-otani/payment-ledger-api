@@ -48,14 +48,13 @@ class TransactionCreate(BaseModel):
     amount: Decimal
     entries: list[EntryCreate]
 
-    # ✍️ Implement this validator: raise ValueError if len(v) < 2
+    # Raise ValueError if len(v) < 2
     @field_validator("entries")
     @classmethod
     def entries_must_have_at_least_two(cls, v: list[EntryCreate]) -> list[EntryCreate]:
-        # TODO: validate that entries has at least 2 items
-        # Hint: if len(v) < 2: raise ValueError("entries must have at least 2 items")
+        # Validate that entries has at least 2 items
         if len(v) < 2:
-            raise ValueError("entries must have at least 2 items (one debit + one credit)")
+            raise ValueError("entries must have at least 2 items")
         return v
 
 
