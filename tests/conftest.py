@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
+from typing import AsyncGenerator as AG
 
 import pytest
 import pytest_asyncio
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -16,6 +19,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from testcontainers.postgres import PostgresContainer
+
+from app.db.session import get_db
+from app.main import app as fastapi_app
 
 
 @pytest.fixture(scope="session")
@@ -84,3 +90,41 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
 
     async with session_factory() as session:
         yield session
+
+
+# ---------------------------------------------------------------------------
+# HTTP layer fixtures (S2-1 re-introduced)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture()
+async def async_client(
+    engine: AsyncEngine,
+) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient with DB dependency overridden to use testcontainer session.
+
+    Key design: a NEW session is created per-request inside the override,
+    not shared across requests. This avoids asyncpg 'another operation in
+    progress' errors that occurred in S1-4 when a single session was reused.
+    """
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    # 🔧 Override get_db to yield a fresh session for each request
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        # TODO: use session_factory to open and yield a session
+        #   Hint:
+        #     async with session_factory() as session:
+        #         yield session
+        ...
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    fastapi_app.dependency_overrides.clear()

@@ -1,5 +1,10 @@
 """Pydantic schemas for Transaction endpoints.
 
+Validation layers:
+  - Pydantic (this file): value shape, amount > 0, entries >= 2
+  - Service layer       : double-entry balance, account_id existence
+  - DB constraints      : FK integrity (last line of defence)
+
 Double-entry rule: sum(debit amounts) == sum(credit amounts).
 This constraint is validated in the service layer, not here.
 
@@ -27,6 +32,15 @@ class EntryCreate(BaseModel):
     entry_type: EntryType
     amount: Decimal
 
+    # ✍️ Validate that amount is strictly positive (> 0)
+    @field_validator("amount")
+    @classmethod
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
+        # TODO: raise ValueError if v <= 0
+        #   Hint: use Decimal("0") for comparison to stay type-safe
+        ...
+        return v
+
 
 class EntryRead(BaseModel):
     id: uuid.UUID
@@ -48,13 +62,20 @@ class TransactionCreate(BaseModel):
     amount: Decimal
     entries: list[EntryCreate]
 
-    # Raise ValueError if len(v) < 2
     @field_validator("entries")
     @classmethod
     def entries_must_have_at_least_two(cls, v: list[EntryCreate]) -> list[EntryCreate]:
-        # Validate that entries has at least 2 items
         if len(v) < 2:
             raise ValueError("entries must have at least 2 items")
+        return v
+
+    # ✍️ Validate that description is not blank (strip whitespace)
+    @field_validator("description")
+    @classmethod
+    def description_must_not_be_blank(cls, v: str) -> str:
+        # TODO: raise ValueError if v.strip() is empty
+        #   Hint: stripped = v.strip(); if not stripped: raise ValueError(...)
+        ...
         return v
 
 
