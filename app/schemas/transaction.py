@@ -32,14 +32,14 @@ class EntryCreate(BaseModel):
     entry_type: EntryType
     amount: Decimal
 
-    # ✍️ Validate that amount is strictly positive (> 0)
+    # Validate that amount is strictly positive (> 0)
     @field_validator("amount")
     @classmethod
     def amount_must_be_positive(cls, v: Decimal) -> Decimal:
-        # TODO: raise ValueError if v <= 0
-        #   Hint: use Decimal("0") for comparison to stay type-safe
-        ...
-        return v
+        # Use Decimal("0") for comparison to stay type-safe
+        if v <= Decimal("0"):
+            raise ValueError("amount must be greater than 0")
+        return
 
 
 class EntryRead(BaseModel):
