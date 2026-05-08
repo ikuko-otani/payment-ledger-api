@@ -27,14 +27,21 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Read DATABASE_URL from environment variable."""
-    # TODO: ここを実装（ヒント: os.environ.get("DATABASE_URL", "") を返す）
-    # asyncpg は Alembic では使えないため同期ドライバに変換する
-    url = os.environ.get(
-        "DATABASE_URL", "postgresql+psycopg://ledger_user:password@db:5432/ledger_db"
+    """Resolve DB URL for Alembic.
+
+    Priority:
+    1. sqlalchemy.url passed via Alembic Config (used by pytest/testcontainers)
+    2. DATABASE_URL environment variable (used in normal app/docker runs)
+    """
+    config_url = config.get_main_option("sqlalchemy.url")
+    if config_url:
+        return config_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+
+    env_url = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+psycopg://ledger_user:password@db:5432/ledger_db",
     )
-    # asyncpg is for async SQLAlchemy; Alembic needs a sync driver
-    return url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+    return env_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
 
 
 def run_migrations_offline() -> None:
