@@ -39,7 +39,7 @@ class EntryCreate(BaseModel):
         # Use Decimal("0") for comparison to stay type-safe
         if v <= Decimal("0"):
             raise ValueError("amount must be greater than 0")
-        return
+        return v
 
 
 class EntryRead(BaseModel):
