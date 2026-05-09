@@ -71,8 +71,16 @@ async def test_post_transactions_zero_amount_returns_422(
         "transaction_date": "2024-01-01",
         "amount": "0",
         "entries": [
-            {"account_id": "11111111-1111-1111-1111-111111111111", "entry_type": "debit", "amount": "0"},
-            {"account_id": "22222222-2222-2222-2222-222222222222", "entry_type": "credit", "amount": "0"},
+            {
+                "account_id": "11111111-1111-1111-1111-111111111111",
+                "entry_type": "debit",
+                "amount": "0",
+            },
+            {
+                "account_id": "22222222-2222-2222-2222-222222222222",
+                "entry_type": "credit",
+                "amount": "0",
+            },
         ],
     }
 
@@ -91,7 +99,11 @@ async def test_post_transactions_single_entry_returns_422(
         "transaction_date": "2024-01-01",
         "amount": "500.00",
         "entries": [
-            {"account_id": "11111111-1111-1111-1111-111111111111", "entry_type": "debit", "amount": "500.00"},
+            {
+                "account_id": "11111111-1111-1111-1111-111111111111",
+                "entry_type": "debit",
+                "amount": "500.00",
+            },
         ],
     }
 
@@ -110,8 +122,16 @@ async def test_post_transactions_unknown_account_returns_422(
         "transaction_date": "2024-01-01",
         "amount": "500.00",
         "entries": [
-            {"account_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "entry_type": "debit", "amount": "500.00"},
-            {"account_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "entry_type": "credit", "amount": "500.00"},
+            {
+                "account_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "entry_type": "debit",
+                "amount": "500.00",
+            },
+            {
+                "account_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "entry_type": "credit",
+                "amount": "500.00",
+            },
         ],
     }
 
@@ -133,6 +153,10 @@ async def test_post_transactions_returns_201_with_id(
     """DONE condition (S2-2): valid double-entry payload -> HTTP 201 + id in response."""
     # TODO: seed two accounts using _seed_account, build a balanced payload,
     #       POST to /api/v1/transactions, assert status 201 and "id" in response JSON
+    # 1. _seed_account でアカウントを2つ作る（debit用 / credit用）
+    # 2. balanced payload を組み立てる
+    # 3. POST して status_code == 201 を確認
+    # 4. body["id"] が存在することと、entries が2件あることを確認
     debit_id = await _seed_account(db_session, "Cash-201", AccountType.ASSET)
     credit_id = await _seed_account(db_session, "Revenue-201", AccountType.REVENUE)
 
