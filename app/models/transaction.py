@@ -47,9 +47,7 @@ class Transaction(Base):
         nullable=False,
     )
 
-    # TODO: entries リレーションを定義する
-    #   ヒント: Mapped[list["Entry"]], back_populates="transaction",
-    #           cascade="all, delete-orphan"
+    # entries リレーションを定義する
     entries: Mapped[list["Entry"]] = relationship(
         # back_populates を設定
         # entry.py で定義した属性名

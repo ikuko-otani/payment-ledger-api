@@ -15,9 +15,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 🔧 Import Base so Alembic can detect models automatically.
-# TODO: ここを実装（ヒント: app.db.base から Base を import し、
-#       target_metadata に Base.metadata を代入する）
+# Import Base so Alembic can detect models automatically.
 from app.db.base import Base  # noqa: E402
 
 # Import all models so their tables are registered on Base.metadata

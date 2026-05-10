@@ -151,8 +151,8 @@ async def test_post_transactions_returns_201_with_id(
     db_session: AsyncSession,
 ) -> None:
     """DONE condition (S2-2): valid double-entry payload -> HTTP 201 + id in response."""
-    # TODO: seed two accounts using _seed_account, build a balanced payload,
-    #       POST to /api/v1/transactions, assert status 201 and "id" in response JSON
+    # Seed two accounts using _seed_account, build a balanced payload,
+    # POST to /api/v1/transactions, assert status 201 and "id" in response JSON
     # 1. _seed_account でアカウントを2つ作る（debit用 / credit用）
     # 2. balanced payload を組み立てる
     # 3. POST して status_code == 201 を確認
@@ -216,8 +216,8 @@ async def test_post_then_get_shows_persisted_record(
     db_session: AsyncSession,
 ) -> None:
     """Persistence check: record created via POST is visible via GET."""
-    # TODO: POST a transaction, extract the returned id,
-    #       GET /transactions, assert the id appears in the list
+    # POST a transaction, extract the returned id,
+    # GET /transactions, assert the id appears in the list
     debit_id = await _seed_account(db_session, "Cash-Persist", AccountType.ASSET)
     credit_id = await _seed_account(db_session, "Revenue-Persist", AccountType.REVENUE)
 

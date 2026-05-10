@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
+from app.dependencies.idempotency import IdempotencyDep
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate, TransactionRead
 from app.services.transaction_service import create_transaction
@@ -33,6 +34,7 @@ async def list_transactions(db: DbDep) -> list[Transaction]:
 async def post_transaction(
     payload: TransactionCreate,
     db: DbDep,
+    _: IdempotencyDep,  # 💡 Depends only — no value needed in the handler body
 ) -> Transaction:
     # create_transaction サービスを呼び出して返す
     return await create_transaction(db, payload)
