@@ -44,6 +44,7 @@ async def idempotent_client(
     redis_client: aioredis.Redis,  # type: ignore[type-arg]
 ):
     """Override get_redis so the app uses the test Redis container."""
+
     async def override_get_redis():
         yield redis_client
 
@@ -92,13 +93,18 @@ async def test_same_idempotency_key_returns_409_on_second_request(
     headers = {"Idempotency-Key": key}
 
     # First request — should succeed
-    r1 = await idempotent_client.post("/api/v1/transactions", json=payload, headers=headers)
+    r1 = await idempotent_client.post(
+        "/api/v1/transactions", json=payload, headers=headers
+    )
     assert r1.status_code == 201
 
-    # TODO: Send the same payload with the same key again.
-    #       Assert that the second response has status_code == 409.
-    #       ヒント: r2 = await idempotent_client.post(..., headers=headers)
-    ...
+    # Send the same payload with the same key again.
+    # Assert that the second response has status_code == 409.
+    r2 = await idempotent_client.post(
+        "/api/v1/transactions", json=payload, headers=headers
+    )
+    assert r2.status_code == 409
+    assert "Idempotency-Key" in r2.json()["detail"]
 
 
 async def test_different_idempotency_keys_both_succeed(
@@ -120,10 +126,14 @@ async def test_different_idempotency_keys_both_succeed(
     }
 
     r1 = await idempotent_client.post(
-        "/api/v1/transactions", json=payload, headers={"Idempotency-Key": str(uuid.uuid4())}
+        "/api/v1/transactions",
+        json=payload,
+        headers={"Idempotency-Key": str(uuid.uuid4())},
     )
     r2 = await idempotent_client.post(
-        "/api/v1/transactions", json=payload, headers={"Idempotency-Key": str(uuid.uuid4())}
+        "/api/v1/transactions",
+        json=payload,
+        headers={"Idempotency-Key": str(uuid.uuid4())},
     )
     assert r1.status_code == 201
     assert r2.status_code == 201
