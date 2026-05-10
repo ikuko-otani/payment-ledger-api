@@ -1,12 +1,11 @@
-# SQLAlchemy: `MissingGreenlet` — リレーションの遅延ロードエラー
+# SQLAlchemy: `MissingGreenlet` — Lazy Load on Relationship
 
-## 発生日
-
+## Date
 2026-05-07
 
-## 症状
+## Problem
 
-Swagger UI から `POST /api/v1/transactions` を実行すると、レスポンス返却時に 500 エラーが発生する。
+Calling `POST /api/v1/transactions` via Swagger UI returns a 500 error during response serialization:
 
 ```
 fastapi.exceptions.ResponseValidationError: 1 validation error:
@@ -21,43 +20,42 @@ fastapi.exceptions.ResponseValidationError: 1 validation error:
   }
 ```
 
-エンドポイント: `POST /api/v1/transactions`（`app/api/v1/routes/transactions.py` 内）
+Endpoint: `POST /api/v1/transactions` (`app/api/v1/routes/transactions.py`)
 
-## 原因
+## Root Cause
 
-`db.refresh(transaction)` はスカラー列（`id`, `date`, `amount` など）しか再読み込みしない。  
-リレーション（`entries`）は **lazy load** のままであり、DB に問い合わせが走っていない。
+`db.refresh(transaction)` only reloads scalar columns (`id`, `date`, `amount`, etc.).
+The `entries` relationship remains in a **lazy-load** state — no DB query has been issued for it.
 
-FastAPI がレスポンスをシリアライズする際に `transaction.entries` へアクセスしようとするが、  
-その時点では `AsyncSession` がすでに閉じているため `MissingGreenlet` エラーが発生する。
+When FastAPI serializes the response, it accesses `transaction.entries`, but by that point the `AsyncSession` is already closed, triggering the `MissingGreenlet` error.
 
 ```
 db.refresh(transaction)
   ↓
-スカラー列は更新される
+Scalar columns are refreshed
   ↓
-entries リレーションは lazy load のまま（未ロード）
+entries relationship stays lazy (not loaded)
   ↓
-FastAPI がシリアライズ時に transaction.entries にアクセス
+FastAPI accesses transaction.entries during serialization
   ↓
-AsyncSession が閉じている → MissingGreenlet 💥
+AsyncSession is closed → MissingGreenlet 💥
 ```
 
-### なぜ AsyncSession では lazy load が使えないのか
+### Why lazy load does not work with AsyncSession
 
-SQLAlchemy の非同期セッション（`AsyncSession`）では、暗黙的な IO（lazy load）が禁止されている。  
-セッションスコープ外で属性にアクセスすると greenlet コンテキストが存在せず、上記エラーになる。
+SQLAlchemy's `AsyncSession` prohibits implicit IO (lazy loading).
+Accessing a relationship attribute outside a session context raises this error because the greenlet context no longer exists.
 
-## 解決手順
+## Fix
 
-`db.refresh()` の代わりに `selectinload` を使って明示的に eager load する。
+Replace `db.refresh()` with an explicit eager load using `selectinload`:
 
 ```python
-# 修正前（❌ entries が lazy load のまま）
+# Before (❌ entries remains lazy)
 await db.refresh(transaction)
 return transaction
 
-# 修正後（✅ AsyncSession 内で entries を eager load）
+# After (✅ entries eagerly loaded within AsyncSession)
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -69,28 +67,27 @@ result = await db.execute(
 return result.scalar_one()
 ```
 
-## 動作確認
+## Verification
 
 ```bash
 git pull origin feature/s1-2-double-entry-db-constraints
 docker compose restart api
-# → "Application startup complete." が出ればOK
+# → Confirm "Application startup complete." appears
 ```
 
-その後 Swagger UI から `POST /api/v1/transactions` を再実行し、  
-レスポンスに `entries` フィールドが含まれることを確認する。
+Then re-run `POST /api/v1/transactions` via Swagger UI and confirm the response includes the `entries` field.
 
-## まとめ: AsyncSession でリレーションを扱う指針
+## Lesson Learned
 
-| 方法 | 使えるか | 備考 |
+| Approach | Usable? | Notes |
 |---|---|---|
-| `db.refresh(obj)` | ⚠️ 一部のみ | スカラー列のみ。リレーションは再ロードされない |
-| lazy load（属性へのアクセス） | ❌ 不可 | AsyncSession 外では MissingGreenlet になる |
-| `selectinload` / `joinedload` | ✅ 推奨 | `select().options(selectinload(...))` で明示的に eager load |
-| `AsyncSession.refresh(obj, attribute_names=[...])` | ✅ 可 | 特定の属性だけ再ロードしたい場合の代替手段 |
+| `db.refresh(obj)` | ⚠️ Partial | Reloads scalar columns only; relationships are not reloaded |
+| Lazy load (attribute access) | ❌ No | Raises MissingGreenlet outside AsyncSession |
+| `selectinload` / `joinedload` | ✅ Recommended | Use `select().options(selectinload(...))` for explicit eager loading |
+| `AsyncSession.refresh(obj, attribute_names=[...])` | ✅ Yes | Alternative when reloading specific attributes only |
 
-## 参考
+## References
 
 - [SQLAlchemy: Preventing Implicit IO — Asyncio](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html#preventing-implicit-io-when-using-asyncsession)
-- [SQLAlchemy エラーコード xd2s](https://sqlalche.me/e/20/xd2s)
+- [SQLAlchemy error code xd2s](https://sqlalche.me/e/20/xd2s)
 - [SQLAlchemy: selectinload](https://docs.sqlalchemy.org/en/20/orm/queryguide/relationships.html#select-in-loading)

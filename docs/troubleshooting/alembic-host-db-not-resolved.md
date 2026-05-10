@@ -1,79 +1,80 @@
-# Alembic: `failed to resolve host 'db'` エラー
+# Alembic: `failed to resolve host 'db'`
 
-## 発生日
+## Date
 2026-05-06
 
-## 症状
+## Problem
 
-`alembic revision --autogenerate` をホスト（Windows）から直接実行すると以下のエラーで失敗する。
+Running `alembic revision --autogenerate` directly from the host (Windows) fails with:
 
 ```
 psycopg.OperationalError: failed to resolve host 'db': [Errno 11001] getaddrinfo failed
-
 sqlalchemy.exc.OperationalError: (psycopg.OperationalError) failed to resolve host 'db'
 ```
 
-## 原因
+## Root Cause
 
-2 つの問題が重なっていた。
+Two issues were compounding each other.
 
-### 原因 1: `DATABASE_URL` のホストが `db`（Docker サービス名）のまま
+### Cause 1: `DATABASE_URL` host set to `db` (Docker service name)
 
-`docker-compose.yml` の `db` サービス名は Docker ネットワーク内でのみ名前解決できる。  
-ホスト OS から直接 `alembic` を実行する場合は `localhost` を使う必要がある。
+The `db` service name in `docker-compose.yml` is only resolvable within the Docker network.
+When running `alembic` directly from the host OS, `localhost` must be used instead.
 
 ```dotenv
-# .env（変更前）
+# .env (before)
 DATABASE_URL=postgresql+psycopg://ledger_user:password@db:5432/ledger_db
 
-# .env（変更後）
+# .env (after)
 DATABASE_URL=postgresql+psycopg://ledger_user:password@localhost:5432/ledger_db
 ```
 
-### 原因 2: `alembic/env.py` が `.env` を読み込んでいない
+### Cause 2: `alembic/env.py` was not loading `.env`
 
-`uv run alembic` は `.env` を自動的に読み込まない。  
-`python-dotenv` の `load_dotenv()` を明示的に呼び出す必要がある。
+`uv run alembic` does not automatically load `.env`.
+`load_dotenv()` from `python-dotenv` must be called explicitly.
 
 ```python
-# alembic/env.py の冒頭に追加
+# Add to the top of alembic/env.py
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # .env を環境変数として読み込む
+load_dotenv()  # Load .env into environment variables
 ```
 
-`python-dotenv` が未インストールの場合はインストールする。
+If `python-dotenv` is not installed:
 
 ```bash
 uv add python-dotenv
 ```
 
-## 解決手順
+## Fix
 
-1. `.env` の `DATABASE_URL` ホストを `db` → `localhost` に変更する
-2. `uv add python-dotenv` を実行する
-3. `alembic/env.py` の冒頭に `load_dotenv()` を追加する
-4. Docker で PostgreSQL が起動していることを確認する
+1. Change the `DATABASE_URL` host in `.env` from `db` to `localhost`
+2. Run `uv add python-dotenv`
+3. Add `load_dotenv()` at the top of `alembic/env.py`
+4. Confirm PostgreSQL is running via Docker:
 
 ```bash
 docker compose up -d db
 ```
 
-5. マイグレーションを再実行する
+5. Re-run the migration:
 
 ```bash
 uv run alembic revision --autogenerate -m "your message"
 ```
 
-## 補足: 実行コンテキストによるホスト名の使い分け
+## Lesson Learned
 
-| 実行場所 | `DATABASE_URL` のホスト |
+The correct host depends on the execution context:
+
+| Execution context | `DATABASE_URL` host |
 |---|---|
-| ホスト OS（`uv run alembic` など） | `localhost` |
-| Docker コンテナ内（`api` サービスなど） | `db`（Docker サービス名） |
+| Host OS (`uv run alembic`, etc.) | `localhost` |
+| Inside Docker container (`api` service, etc.) | `db` (Docker service name) |
 
-## 参考
+## References
 
-- [python-dotenv ドキュメント](https://saurabh-kumar.com/python-dotenv/)
-- [Alembic: env.py のカスタマイズ](https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-migration-script)
+- [python-dotenv documentation](https://saurabh-kumar.com/python-dotenv/)
+- [Alembic: Customizing env.py](https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-migration-script)

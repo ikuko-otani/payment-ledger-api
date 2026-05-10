@@ -1,11 +1,11 @@
-# psycopg: `libpq library not found` エラー
+# psycopg: `libpq library not found`
 
-## 発生日
+## Date
 2026-05-06
 
-## 症状
+## Problem
 
-`alembic revision --autogenerate` 実行時に以下のエラーで失敗する。
+Running `alembic revision --autogenerate` fails with:
 
 ```
 ImportError: no pq wrapper available.
@@ -14,33 +14,37 @@ ImportError: no pq wrapper available.
 - couldn't import psycopg 'python' implementation: libpq library not found
 ```
 
-## 原因
+## Root Cause
 
-`python:3.12-slim` ベースイメージには PostgreSQL クライアントライブラリ（`libpq`）が含まれていない。  
-`psycopg`（psycopg3）の純粋 Python 実装は実行時に `libpq` を動的リンクするため、
-ライブラリが存在しないコンテナ内では起動できない。
+The `python:3.12-slim` base image does not include the PostgreSQL client library (`libpq`).
+The pure-Python implementation of `psycopg` (psycopg3) dynamically links to `libpq` at runtime,
+so it cannot start inside a container that lacks the library.
 
-## 解決策
+## Fix
 
-`pyproject.toml` の依存を `psycopg[binary]` に変更する。  
-`[binary]` エクストラは `libpq` を静的にバンドルしたホイールを使用するため、
-OS 側にライブラリをインストールする必要がない。
+Change the dependency in `pyproject.toml` from `psycopg` to `psycopg[binary]`.
+The `[binary]` extra uses a wheel with `libpq` statically bundled, so no OS-level library installation is needed.
 
 ```toml
-# pyproject.toml（変更前）
+# pyproject.toml (before)
 "psycopg>=3.3.4",
 
-# pyproject.toml（変更後）
+# pyproject.toml (after)
 "psycopg[binary]>=3.3.4",
 ```
 
-変更後、コンテナを再ビルドする。
+After the change, rebuild the container:
 
 ```bash
 docker compose build --no-cache api
 docker compose up -d
 ```
 
-## 参考
+## Lesson Learned
+
+When using `python:3.12-slim` (or any slim image), system-level libraries like `libpq` are stripped out.
+Prefer `psycopg[binary]` over bare `psycopg` in containerized environments to avoid runtime dependency issues.
+
+## References
 
 - [psycopg3 installation docs](https://www.psycopg.org/psycopg3/docs/basic/install.html)
