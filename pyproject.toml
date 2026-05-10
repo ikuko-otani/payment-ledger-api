@@ -10,6 +10,7 @@ dependencies = [
   "pydantic-settings>=2.3",
   "psycopg[binary]>=3.3.4",
   "python-dotenv>=1.2.2",
+  "redis[hiredis]>=5.0",
 ]
 
 [dependency-groups]
