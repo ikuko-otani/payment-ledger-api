@@ -51,12 +51,16 @@ async def check_idempotency(
 
     redis_key = f"{_REDIS_KEY_PREFIX}{idempotency_key}"
 
-    # TODO: Use redis.set() with nx=True and ex=_IDEMPOTENCY_TTL_SECONDS.
-    #       SET NX returns True when the key was newly created, False when it already existed.
-    #       If False (= duplicate), raise HTTPException with status 409 and
-    #       detail="Duplicate request: Idempotency-Key already used".
-    #       ヒント: was_set = await redis.set(redis_key, "1", nx=True, ex=...)
-    ...
+    # Use redis.set() with nx=True and ex=_IDEMPOTENCY_TTL_SECONDS.
+    # SET NX returns True when the key was newly created, False when it already existed.
+    # If False (= duplicate), raise HTTPException with status 409 and
+    # detail="Duplicate request: Idempotency-Key already used".
+    was_set = await redis.set(redis_key, "1", nx=True, ex=_IDEMPOTENCY_TTL_SECONDS)
+    if not was_set:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate request: Idempotency-Key already used",
+        )
 
 
 IdempotencyDep = Annotated[None, Depends(check_idempotency)]
