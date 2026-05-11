@@ -138,6 +138,42 @@ Example: "Pydantic schema portion as guided, SQL query portion as stretch."
 - When relevant files exist, **read them first** before suggesting changes.
 - When uncertain, ask rather than guess.
 
+### 4.7 Commit granularity
+
+Prefer **small, frequent commits** over a few large commits. Commit each
+logically complete unit of work as soon as it stands on its own (compiles,
+passes the relevant tests, or completes a single concern). This serves
+three purposes:
+
+- Provides a clear, recoverable history for debugging and review
+- Pushes work to the remote frequently as a backup
+- Demonstrates incremental engineering thinking when the repository is
+  reviewed (e.g., by hiring managers)
+
+**Granularity rule of thumb**:
+- One ✍️ / 🔧 / 📋 block from a Step C walkthrough = one commit
+- Commit boundary aligns with the step's verification command passing
+- Refactors, file moves, and formatting changes commit separately from
+  feature changes
+
+**Commit message format**:
+- Imperative mood, English (e.g., "add", "fix", "refactor")
+- Conventional prefix: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
+- Scope: lowercase goal ID when applicable, e.g., `feat(s2-4): ...`
+- Subject line under 72 characters
+- Add body lines after a blank line when explanation is useful
+
+**When suggesting code changes, also suggest the commit command**:
+After presenting a code block intended to be applied, include the commit
+command the developer should run after the verification passes. Example:
+
+```bash
+git add <files> && git commit -m "feat(s2-4): validate idempotency-key as uuid"
+```
+
+This makes commit pacing a natural part of the implementation rhythm
+rather than an afterthought.
+
 ---
 
 ## 5. Goal Execution Workflow
@@ -165,6 +201,7 @@ Do not proceed to Step B until the developer confirms ("Step A OK" / "proceed").
 - Commit message: `feat({goal-id-lowercase}): scaffold {kebab-case-name}`
   - Example: `feat(s2-4): scaffold idempotency-duplicate-check`
 - After completion, **report branch name and changed file list**.
+- **After the verification command, include the commit command** (see 4.7).
 
 ### Step C — Implementation walkthrough (Markdown)
 
