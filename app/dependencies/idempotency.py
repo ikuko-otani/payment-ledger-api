@@ -16,6 +16,8 @@ from fastapi import Depends, Header, HTTPException, status
 
 from app.core.config import settings
 
+import uuid
+
 # TTL for idempotency keys in Redis (24 hours)
 _IDEMPOTENCY_TTL_SECONDS = 86_400
 _REDIS_KEY_PREFIX = "idempotency:"
@@ -38,7 +40,7 @@ RedisDep = Annotated[aioredis.Redis, Depends(get_redis)]  # type: ignore[type-ar
 
 async def check_idempotency(
     redis: RedisDep,
-    idempotency_key: Annotated[str | None, Header()] = None,  # ✍️ change str → uuid.UUID (add import uuid at top)
+    idempotency_key: Annotated[uuid.UUID | None, Header()] = None,
 ) -> None:
     """FastAPI dependency: reject duplicate requests by Idempotency-Key.
 
