@@ -114,9 +114,13 @@ async def async_client(
 
     # Override get_db to yield a fresh session for each request
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        # Use session_factory to open and yield a session
         async with session_factory() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
 
