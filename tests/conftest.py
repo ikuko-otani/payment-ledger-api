@@ -117,9 +117,9 @@ async def async_client(
         async with session_factory() as session:
             try:
                 yield session
-                # TODO: implement (hint: mirror production get_db — await session.commit())
+                await session.commit()
             except Exception:
-                # TODO: implement (hint: await session.rollback(), then re-raise)
+                await session.rollback()
                 raise
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
