@@ -363,10 +363,22 @@ Examples of trigger-worthy questions:
 - "How does X in this stack compare to PHP/Java equivalents?"
 - "What are the alternatives to Z and their trade-offs?"
 
-**Step C walkthroughs go here**:
-Per-goal implementation walkthroughs (Step C from Section 5) are saved as
-`docs/learning-notes/<goal-id>-<kebab-name>.md`. This creates a searchable
-archive of how each goal was implemented.
+**Per-goal notes (required for every goal)**:
+Every goal produces one primary note saved as
+`docs/learning-notes/<goal-id>-<kebab-name>.md`. This file contains:
+
+1. **Step C walkthrough** — the implementation guide (generated during Step C)
+2. **Key takeaways** — a dedicated section at the end summarising what was
+   learned, to be added after the goal is complete. Written in first person,
+   in the past tense. Should answer: "What did I learn?", "What would I do
+   differently?", "What surprised me?", "What is worth remembering for
+   future goals?"
+
+If a non-trivial debugging investigation occurred during the goal, it may be
+recorded as a separate file `<goal-id>-<topic>-debug.md` (e.g.
+`s2-4-td001-fixture-debug.md`) and linked from the primary note.
+
+**Language**: English (consistent with all other docs/ content).
 
 **Format**:
 - Date and goal context at the top
