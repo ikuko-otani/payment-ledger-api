@@ -174,9 +174,10 @@ async def test_idempotency_key_arbitrary_string_returns_422(
     idempotent_client: AsyncClient,
 ) -> None:
     """Non-UUID string as Idempotency-Key must be rejected with 422."""
-    # TODO: implement (hint: POST to /api/v1/transactions with headers={"Idempotency-Key": "not-a-uuid"},
-    #   assert response.status_code == 422)
-    pass
+    response = await idempotent_client.post(
+        "/api/v1/transactions", json={}, headers={"Idempotency-Key": "not-a-uuid"}
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -184,9 +185,10 @@ async def test_idempotency_key_numeric_string_returns_422(
     idempotent_client: AsyncClient,
 ) -> None:
     """Short numeric string as Idempotency-Key must be rejected with 422."""
-    # TODO: implement (hint: POST with headers={"Idempotency-Key": "12345"},
-    #   assert response.status_code == 422)
-    pass
+    response = await idempotent_client.post(
+        "/api/v1/transactions", json={}, headers={"Idempotency-Key": "12345"}
+    )
+    assert response.status_code == 422
 
 
 async def test_no_idempotency_key_header_succeeds(
