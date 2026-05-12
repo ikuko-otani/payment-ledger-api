@@ -38,7 +38,7 @@ RedisDep = Annotated[aioredis.Redis, Depends(get_redis)]  # type: ignore[type-ar
 
 async def check_idempotency(
     redis: RedisDep,
-    idempotency_key: Annotated[str | None, Header()] = None,
+    idempotency_key: Annotated[str | None, Header()] = None,  # ✍️ change str → uuid.UUID (add import uuid at top)
 ) -> None:
     """FastAPI dependency: reject duplicate requests by Idempotency-Key.
 
