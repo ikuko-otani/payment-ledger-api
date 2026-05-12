@@ -214,6 +214,65 @@ Do not proceed to Step B until the developer confirms ("Step A OK" / "proceed").
 
 For detailed format, see `flagship-goal-prompt-template.md`.
 
+### Step D — Goal closeout (after DONE conditions are met)
+
+Run in order after all DONE conditions are confirmed and the PR is merged.
+
+**1. Add Key takeaways to the per-goal note**
+
+Ask Claude Code:
+```
+Add a "## Key takeaways" section to
+docs/learning-notes/<goal-id>-<name>.md.
+Answer the following questions in English, first person, past tense:
+- What did I learn?
+- What would I do differently?
+- What surprised me?
+- What is worth remembering for future goals?
+```
+
+**2. Update Notion**
+
+Ask Claude Code:
+```
+Update the Notion page for <goal-id>:
+- Status → ✅ Done
+- Progress % → 100
+- Weekly Retro: <paste your retro notes>
+```
+
+**3. Prepare flagship-goal-prompt-template.md for the next goal**
+
+Ask Claude Code:
+```
+Prepare flagship-goal-prompt-template.md for the next goal.
+
+Next goal Notion page: <URL>
+
+Please:
+1. Read the Notion page and fill in ① (Goal location).
+   For the branch name, propose a name following the
+   feature/{goal-id-lowercase}-{kebab-case-name} convention
+   based on the Goal title, then ask me to confirm before writing.
+2. Leave ② (Personal policy) blank with placeholder text —
+   ask me for support_level and any constraints before filling it in.
+3. Fill in ③ (Handoff notes) based on:
+   - Key takeaways from docs/learning-notes/<current-goal-id>-<name>.md
+   - Any known issues or tech debt discovered during this goal
+   - Anything the next goal needs to be aware of
+Do not write the file until ① branch name and ② are confirmed with me.
+```
+
+**4. Commit learning-notes**
+
+```bash
+git add docs/learning-notes/
+git commit -m "docs(<goal-id>): add learning notes and key takeaways"
+git push origin main
+```
+
+Note: flagship-goal-prompt-template.md is not version-controlled (.gitignore).
+
 ### Before Step A, confirm
 
 - support_level (guided / balanced / stretch, or mixed per area)
