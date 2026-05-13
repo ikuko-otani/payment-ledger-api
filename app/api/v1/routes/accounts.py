@@ -14,6 +14,8 @@ from app.db.session import get_db
 from app.models.account import Account
 from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
 
+from decimal import Decimal
+
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -43,5 +45,6 @@ async def get_account_balance(
     id: uuid.UUID,
     as_of: datetime,
 ) -> BalanceResponse:
-    # 🔧 Step C-2: return stub — TODO: replace with actual DB balance query
-    return BalanceResponse()
+    # Return stub
+    # TODO: replace with actual DB balance query (future goal)
+    return BalanceResponse(balance=Decimal("0.00"), as_of=as_of)
