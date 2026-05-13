@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -10,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.account import Account
-from app.schemas.account import AccountCreate, AccountRead
+from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -34,3 +36,12 @@ async def create_account(payload: AccountCreate, db: DbDep) -> Account:
     await db.flush()
     await db.refresh(account)
     return account
+
+
+@router.get("/{id}/balance", response_model=BalanceResponse)
+async def get_account_balance(
+    id: uuid.UUID,
+    as_of: datetime,
+) -> BalanceResponse:
+    # 🔧 Step C-2: return stub — TODO: replace with actual DB balance query
+    return BalanceResponse()

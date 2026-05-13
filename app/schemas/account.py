@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -31,3 +32,12 @@ class AccountRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Balance response schema
+# ---------------------------------------------------------------------------
+
+
+class BalanceResponse(BaseModel):
+    pass  # ✍️  Step C-1: add balance and as_of fields
