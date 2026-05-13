@@ -40,4 +40,5 @@ class AccountRead(BaseModel):
 
 
 class BalanceResponse(BaseModel):
-    pass  # ✍️  Step C-1: add balance and as_of fields
+    balance: Decimal
+    as_of: datetime
