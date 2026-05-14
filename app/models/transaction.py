@@ -1,24 +1,33 @@
 """Transaction model — a double-entry transaction header.
 
 One Transaction links to two or more Entry rows (debit + credit).
-Balance rule (debit_sum == credit_sum) is enforced at the DB level
-via a CHECK constraint added in the S1-2 Alembic migration.
+Balance rule (debit_sum == credit_sum) is enforced at the application layer.
+Transactions are immutable once POSTED; corrections use reversal transactions.
 """
 
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Numeric, func
+from sqlalchemy import Enum, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.entry import Entry
+
+
+# purpose: lifecycle state
+#   POSTED means committed to ledger
+#   VOIDED means cancelled (a new reversal transaction is created, not deleted)
+class TransactionStatus(str, enum.Enum):
+    PENDING = "pending"
+    POSTED = "posted"
+    VOIDED = "voided"
 
 
 class Transaction(Base):
@@ -30,38 +39,31 @@ class Transaction(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    description: Mapped[str] = mapped_column(
+    description: Mapped[str] = mapped_column(nullable=False)
+    transaction_date: Mapped[date] = mapped_column(nullable=False)
+    status: Mapped[TransactionStatus] = mapped_column(
+        Enum(TransactionStatus, name="transactionstatus"),
         nullable=False,
+        default=TransactionStatus.POSTED,
     )
-    transaction_date: Mapped[date] = mapped_column(
-        nullable=False,
-    )
-    # 💡 Numeric(18, 4): 18 significant digits, 4 decimal places.
-    #    Avoids floating-point rounding errors critical in financial systems.
-    amount: Mapped[Decimal] = mapped_column(
-        Numeric(precision=18, scale=4),
-        nullable=False,
-    )
+    # set to datetime.utcnow() in the service layer when status → POSTED
+    posted_at: Mapped[datetime | None] = mapped_column(nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         nullable=False,
     )
+    # column name "metadata" in DB
+    # metadata_ in Python to avoid conflict with SQLAlchemy's internal MetaData object
+    metadata_: Mapped[dict | None] = mapped_column(
+        "metadata", JSON, nullable=True, default=None
+    )
 
-    # entries リレーションを定義する
     entries: Mapped[list["Entry"]] = relationship(
-        # back_populates を設定
-        # entry.py で定義した属性名
         back_populates="transaction",
-        # cascade を設定
-        # 親Transactionを消したらEntryも消えてほしい
-        cascade="all, delete-orphan",
-        # lazy loading の設定
-        # "select" でOK、デフォルト値
+        cascade="save-update, merge",
+        # not "delete-orphan": immutable ledger never deletes posted entries
         lazy="select",
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<Transaction id={self.id} "
-            f"date={self.transaction_date} amount={self.amount}>"
-        )
+        return f"<Transaction id={self.id} " f"date={self.transaction_date}>"

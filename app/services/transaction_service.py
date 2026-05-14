@@ -16,9 +16,11 @@ from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException, status
 
+from datetime import datetime, timezone
+
 from app.models.account import Account
-from app.models.entry import Entry, EntryType
-from app.models.transaction import Transaction
+from app.models.entry import Entry, Direction
+from app.models.transaction import Transaction, TransactionStatus
 from app.schemas.transaction import TransactionCreate
 
 
@@ -42,21 +44,20 @@ async def create_transaction(
         )
 
     # ------------------------------------------------------------------
-    # Validate: double-entry balance
+    # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
-    debit_sum = sum(
-        e.amount for e in payload.entries if e.entry_type == EntryType.DEBIT
-    )
+    # 🔧 TODO: update DEBIT/CREDIT attribute access from entry_type → direction
+    # hint: replace EntryType.DEBIT → Direction.DEBIT, EntryType.CREDIT → Direction.CREDIT
+    debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
     credit_sum = sum(
-        e.amount for e in payload.entries if e.entry_type == EntryType.CREDIT
+        e.amount for e in payload.entries if e.direction == Direction.CREDIT
     )
 
     if debit_sum != credit_sum:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                f"Entries are not balanced: "
-                f"debit={debit_sum} credit={credit_sum}"
+                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
             ),
         )
 
@@ -66,27 +67,28 @@ async def create_transaction(
     transaction = Transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
-        amount=payload.amount,
+        status=TransactionStatus.POSTED,
+        posted_at=datetime.now(timezone.utc),
     )
     db.add(transaction)
     await db.flush()
 
+    # 🔧 TODO: update Entry() instantiation
+    # hint: replace entry_type=entry.entry_type → direction=entry.direction
+    #       add currency=entry.currency
     entries = [
         Entry(
             transaction_id=transaction.id,
             account_id=entry.account_id,
-            entry_type=entry.entry_type,
+            direction=entry.direction,
             amount=entry.amount,
+            currency=entry.currency,
         )
         for entry in payload.entries
     ]
     db.add_all(entries)
     await db.flush()
 
-    # Use selectinload to eagerly load entries within the open AsyncSession.
-    # db.refresh(transaction) alone only refreshes scalar columns; it does NOT
-    # load relationship attributes (lazy by default), causing MissingGreenlet
-    # when FastAPI serialises the response outside the session context.
     result = await db.execute(
         select(Transaction)
         .where(Transaction.id == transaction.id)
