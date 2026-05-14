@@ -16,12 +16,11 @@ from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException, status
 
+from datetime import datetime, timezone
+
 from app.models.account import Account
-from app.models.entry import Entry
-# ✍️ replace EntryType import with: from app.models.entry import Direction
-# ✍️ add import: from app.models.transaction import Transaction, TransactionStatus
-from app.models.entry import EntryType  # TODO: replace with Direction in Step C
-from app.models.transaction import Transaction
+from app.models.entry import Entry, Direction
+from app.models.transaction import Transaction, TransactionStatus
 from app.schemas.transaction import TransactionCreate
 
 
@@ -49,35 +48,27 @@ async def create_transaction(
     # ------------------------------------------------------------------
     # 🔧 TODO: update DEBIT/CREDIT attribute access from entry_type → direction
     # hint: replace EntryType.DEBIT → Direction.DEBIT, EntryType.CREDIT → Direction.CREDIT
-    debit_sum = sum(
-        e.amount for e in payload.entries if e.entry_type == EntryType.DEBIT  # TODO: e.direction == Direction.DEBIT
-    )
+    debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
     credit_sum = sum(
-        e.amount for e in payload.entries if e.entry_type == EntryType.CREDIT  # TODO: e.direction == Direction.CREDIT
+        e.amount for e in payload.entries if e.direction == Direction.CREDIT
     )
 
     if debit_sum != credit_sum:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                f"Entries are not balanced: "
-                f"debit={debit_sum} credit={credit_sum}"
+                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
             ),
         )
 
     # ------------------------------------------------------------------
     # Persist
     # ------------------------------------------------------------------
-    # 🔧 TODO: update Transaction() instantiation
-    # hint: remove amount=payload.amount
-    #       add status=TransactionStatus.POSTED
-    #       add posted_at=datetime.utcnow()  (import datetime from datetime)
     transaction = Transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
-        # amount=payload.amount,  ← REMOVE: no longer on Transaction model
-        # TODO: status=TransactionStatus.POSTED,
-        # TODO: posted_at=datetime.utcnow(),
+        status=TransactionStatus.POSTED,
+        posted_at=datetime.now(timezone.utc),
     )
     db.add(transaction)
     await db.flush()
@@ -89,9 +80,9 @@ async def create_transaction(
         Entry(
             transaction_id=transaction.id,
             account_id=entry.account_id,
-            entry_type=entry.entry_type,  # TODO: direction=entry.direction
+            direction=entry.direction,
             amount=entry.amount,
-            # TODO: currency=entry.currency,
+            currency=entry.currency,
         )
         for entry in payload.entries
     ]
