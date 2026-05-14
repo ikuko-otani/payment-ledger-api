@@ -28,10 +28,10 @@ async def list_accounts(db: DbDep) -> list[Account]:
 @router.post("", response_model=AccountRead, status_code=201)
 async def create_account(payload: AccountCreate, db: DbDep) -> Account:
     account = Account(
-        # ✍️ code=payload.code,  — add after code field is on Account model
+        code=payload.code,
         name=payload.name,
         account_type=payload.account_type,
-        # ✍️ currency=payload.currency,  — add after currency field is on Account model
+        currency=payload.currency,
     )
     db.add(account)
     await db.flush()
