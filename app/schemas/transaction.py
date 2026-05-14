@@ -18,10 +18,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, field_validator
 
-# ✍️ from app.models.entry import Direction
-#    (renamed from EntryType — update this import in Step C)
-# ✍️ from app.models.transaction import TransactionStatus
-#    (new enum — update this import in Step C)
+from app.models.entry import Direction
+from app.models.transaction import TransactionStatus
 
 # ---------------------------------------------------------------------------
 # Entry sub-schemas
@@ -30,25 +28,24 @@ from pydantic import BaseModel, field_validator
 
 class EntryCreate(BaseModel):
     account_id: uuid.UUID
-    # ✍️ direction: Direction  — renamed from entry_type
-    # ✍️ amount: int  — BIGINT minor units (was Decimal); e.g. 1000 for €10.00
-    # ✍️ currency: str  — ISO 4217 e.g. "EUR"
+    direction: Direction
+    amount: int  # BIGINT minor units (was Decimal); e.g. 1000 for €10.00
+    currency: str  # ISO 4217 e.g. "EUR"
 
-    # 🔧 TODO: implement amount_must_be_positive validator
-    # hint: same structure as old Decimal validator, but compare v > 0 for int
-    # @field_validator("amount")
-    # @classmethod
-    # def amount_must_be_positive(cls, v: int) -> int:
-    #     # TODO: implement (hint: raise ValueError if v <= 0)
-    #     ...
+    @field_validator("amount")
+    @classmethod
+    def amount_must_be_positive(cls, v: int):
+        if v <= 0:
+            raise ValueError("amount must be greater than 0")
+        return v
 
 
 class EntryRead(BaseModel):
     id: uuid.UUID
     account_id: uuid.UUID
-    # ✍️ direction: Direction
-    # ✍️ amount: int
-    # ✍️ currency: str
+    direction: Direction
+    amount: int
+    currency: str
 
     model_config = {"from_attributes": True}
 
