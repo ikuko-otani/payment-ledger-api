@@ -8,19 +8,20 @@ Validation layers:
 Double-entry rule: sum(debit amounts) == sum(credit amounts).
 This constraint is validated in the service layer, not here.
 
-Entries minimum: at least 2 entries required (one debit + one credit).
+Amounts are BIGINT (minor currency units): 1000 = €10.00, 500 = ¥500.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
-from typing import Annotated
 
 from pydantic import BaseModel, field_validator
 
-from app.models.entry import EntryType
+# ✍️ from app.models.entry import Direction
+#    (renamed from EntryType — update this import in Step C)
+# ✍️ from app.models.transaction import TransactionStatus
+#    (new enum — update this import in Step C)
 
 # ---------------------------------------------------------------------------
 # Entry sub-schemas
@@ -29,24 +30,25 @@ from app.models.entry import EntryType
 
 class EntryCreate(BaseModel):
     account_id: uuid.UUID
-    entry_type: EntryType
-    amount: Decimal
+    # ✍️ direction: Direction  — renamed from entry_type
+    # ✍️ amount: int  — BIGINT minor units (was Decimal); e.g. 1000 for €10.00
+    # ✍️ currency: str  — ISO 4217 e.g. "EUR"
 
-    # Validate that amount is strictly positive (> 0)
-    @field_validator("amount")
-    @classmethod
-    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
-        # Use Decimal("0") for comparison to stay type-safe
-        if v <= Decimal("0"):
-            raise ValueError("amount must be greater than 0")
-        return v
+    # 🔧 TODO: implement amount_must_be_positive validator
+    # hint: same structure as old Decimal validator, but compare v > 0 for int
+    # @field_validator("amount")
+    # @classmethod
+    # def amount_must_be_positive(cls, v: int) -> int:
+    #     # TODO: implement (hint: raise ValueError if v <= 0)
+    #     ...
 
 
 class EntryRead(BaseModel):
     id: uuid.UUID
     account_id: uuid.UUID
-    entry_type: EntryType
-    amount: Decimal
+    # ✍️ direction: Direction
+    # ✍️ amount: int
+    # ✍️ currency: str
 
     model_config = {"from_attributes": True}
 
@@ -59,7 +61,7 @@ class EntryRead(BaseModel):
 class TransactionCreate(BaseModel):
     description: str
     transaction_date: date
-    amount: Decimal
+    # amount removed: redundant in double-entry — derived from SUM(entries.amount)
     entries: list[EntryCreate]
 
     @field_validator("entries")
@@ -69,11 +71,9 @@ class TransactionCreate(BaseModel):
             raise ValueError("entries must have at least 2 items")
         return v
 
-    # Validate that description is not blank (strip whitespace)
     @field_validator("description")
     @classmethod
     def description_must_not_be_blank(cls, v: str) -> str:
-        # Raise ValueError if v.strip() is empty
         if not v.strip():
             raise ValueError("description must not be blank")
         return v
@@ -83,7 +83,8 @@ class TransactionRead(BaseModel):
     id: uuid.UUID
     description: str
     transaction_date: date
-    amount: Decimal
+    # amount removed
+    # ✍️ status: TransactionStatus  — add after TransactionStatus import is in place
     created_at: datetime
     entries: list[EntryRead]
 
