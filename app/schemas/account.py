@@ -15,10 +15,10 @@ from app.models.account import AccountType
 
 
 class AccountCreate(BaseModel):
-    # ✍️ code: str  — Chart of Accounts code e.g. "1100", "2000"
+    code: str  # Chart of Accounts code e.g. "1100", "2000"
     name: str
     account_type: AccountType
-    # ✍️ currency: str  — ISO 4217 code e.g. "EUR"
+    currency: str  # ISO 4217 code e.g. "EUR"
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +28,13 @@ class AccountCreate(BaseModel):
 
 class AccountRead(BaseModel):
     id: uuid.UUID
-    # ✍️ code: str
+    code: str
     name: str
     account_type: AccountType
-    # ✍️ currency: str
-    # ✍️ is_active: bool
+    currency: str
+    is_active: bool
     created_at: datetime
-    # ✍️ updated_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
