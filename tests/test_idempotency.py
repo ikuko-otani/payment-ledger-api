@@ -22,21 +22,19 @@ from app.models.account import AccountType
 
 @pytest.fixture(scope="session")
 def redis_container():
-    """Start one Redis container for the whole test session."""
     with RedisContainer("redis:7-alpine") as rc:
         yield rc
 
 
 @pytest_asyncio.fixture()
 async def redis_client(redis_container: RedisContainer):
-    """Yield a Redis client connected to the test container."""
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
     client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
         f"redis://{host}:{port}", encoding="utf-8", decode_responses=True
     )
     yield client
-    await client.flushdb()  # clean up keys after each test
+    await client.flushdb()
     await client.aclose()
 
 
@@ -45,28 +43,11 @@ async def idempotent_client(
     async_client: AsyncClient,
     redis_client: aioredis.Redis,  # type: ignore[type-arg]
 ):
-    """Override get_redis so the app uses the test Redis container."""
-
     async def override_get_redis():
         yield redis_client
 
     fastapi_app.dependency_overrides[get_redis] = override_get_redis
     yield async_client
-    # dependency_overrides is cleared by async_client fixture teardown
-
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
-
-MINIMAL_PAYLOAD = {
-    "description": "Idempotency test",
-    "transaction_date": "2024-06-01",
-    "entries": [
-        {"account_id": None, "amount": "100.00", "entry_type": "debit"},
-        {"account_id": None, "amount": "100.00", "entry_type": "credit"},
-    ],
-}
 
 
 # ---------------------------------------------------------------------------
@@ -79,47 +60,45 @@ async def test_same_idempotency_key_returns_409_on_second_request(
     async_client: AsyncClient,
     db_session,
 ) -> None:
-    """Second POST with the same Idempotency-Key must return 409 Conflict."""
-    from tests.test_transactions import (
-        _create_account as create_account,
-    )  # reuse account factory
+    from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
         db_session, name="Cash", account_type=AccountType.ASSET
+        # ✍️ add: code="1100"
     )
     acc_credit = await create_account(
         db_session, name="Revenue", account_type=AccountType.REVENUE
+        # ✍️ add: code="4000"
     )
 
     key = str(uuid.uuid4())
     payload = {
         "description": "Idempotency test",
         "transaction_date": "2024-06-01",
-        "amount": "100.00",
+        # "amount" removed from transaction level
         "entries": [
             {
                 "account_id": str(acc_debit.id),
-                "amount": "100.00",
-                "entry_type": "debit",
+                "direction": "debit",   # ✍️ renamed from entry_type
+                "amount": 100,          # ✍️ int minor units (was "100.00")
+                "currency": "EUR",      # ✍️ new required field
             },
             {
                 "account_id": str(acc_credit.id),
-                "amount": "100.00",
-                "entry_type": "credit",
+                "direction": "credit",
+                "amount": 100,
+                "currency": "EUR",
             },
         ],
     }
     headers = {"Idempotency-Key": key}
 
-    # First request — should succeed
     r1 = await idempotent_client.post(
         "/api/v1/transactions", json=payload, headers=headers
     )
     print(r1.json())
     assert r1.status_code == 201
 
-    # Send the same payload with the same key again.
-    # Assert that the second response has status_code == 409.
     r2 = await idempotent_client.post(
         "/api/v1/transactions", json=payload, headers=headers
     )
@@ -131,26 +110,32 @@ async def test_different_idempotency_keys_both_succeed(
     idempotent_client: AsyncClient,
     db_session,
 ) -> None:
-    """Two requests with different Idempotency-Keys must both return 201."""
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
         db_session, name="Cash2", account_type=AccountType.ASSET
+        # ✍️ add: code="1101"
     )
     acc_credit = await create_account(
         db_session, name="Revenue2", account_type=AccountType.REVENUE
+        # ✍️ add: code="4001"
     )
 
     payload = {
         "description": "Different keys test",
         "transaction_date": "2024-06-01",
-        "amount": "50.00",
         "entries": [
-            {"account_id": str(acc_debit.id), "amount": "50.00", "entry_type": "debit"},
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 50,
+                "currency": "EUR",
+            },
             {
                 "account_id": str(acc_credit.id),
-                "amount": "50.00",
-                "entry_type": "credit",
+                "direction": "credit",
+                "amount": 50,
+                "currency": "EUR",
             },
         ],
     }
@@ -173,7 +158,6 @@ async def test_different_idempotency_keys_both_succeed(
 async def test_idempotency_key_arbitrary_string_returns_422(
     idempotent_client: AsyncClient,
 ) -> None:
-    """Non-UUID string as Idempotency-Key must be rejected with 422."""
     response = await idempotent_client.post(
         "/api/v1/transactions", json={}, headers={"Idempotency-Key": "not-a-uuid"}
     )
@@ -184,7 +168,6 @@ async def test_idempotency_key_arbitrary_string_returns_422(
 async def test_idempotency_key_numeric_string_returns_422(
     idempotent_client: AsyncClient,
 ) -> None:
-    """Short numeric string as Idempotency-Key must be rejected with 422."""
     response = await idempotent_client.post(
         "/api/v1/transactions", json={}, headers={"Idempotency-Key": "12345"}
     )
@@ -195,26 +178,32 @@ async def test_no_idempotency_key_header_succeeds(
     idempotent_client: AsyncClient,
     db_session,
 ) -> None:
-    """Requests without Idempotency-Key header are processed normally."""
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
         db_session, name="Cash3", account_type=AccountType.ASSET
+        # ✍️ add: code="1102"
     )
     acc_credit = await create_account(
         db_session, name="Revenue3", account_type=AccountType.REVENUE
+        # ✍️ add: code="4002"
     )
 
     payload = {
         "description": "No key test",
         "transaction_date": "2024-06-01",
-        "amount": "30.00",
         "entries": [
-            {"account_id": str(acc_debit.id), "amount": "30.00", "entry_type": "debit"},
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 30,
+                "currency": "EUR",
+            },
             {
                 "account_id": str(acc_credit.id),
-                "amount": "30.00",
-                "entry_type": "credit",
+                "direction": "credit",
+                "amount": 30,
+                "currency": "EUR",
             },
         ],
     }
