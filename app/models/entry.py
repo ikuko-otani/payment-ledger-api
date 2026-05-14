@@ -5,6 +5,7 @@ total debit amount equals total credit amount (double-entry rule).
 Amounts are stored as BIGINT (minor currency units e.g. cents for EUR/USD).
 Row-level CHECK ensures amount is positive.
 """
+
 from __future__ import annotations
 
 import enum
@@ -21,19 +22,16 @@ if TYPE_CHECKING:
     from app.models.transaction import Transaction
 
 
-# ✍️ class Direction(str, enum.Enum):
-#    hint: 2 members — DEBIT = "debit", CREDIT = "credit"
-#    renamed from EntryType; migration will rename the PostgreSQL enum type
-#    "entrytype" → "direction" with: op.execute("ALTER TYPE entrytype RENAME TO direction")
+class Direction(str, enum.Enum):
+    DEBIT = "debit"
+    CREDIT = "credit"
 
 
 class Entry(Base):
     """Journal entry line table (debit or credit side of a transaction)."""
 
     __tablename__ = "entries"
-    __table_args__ = (
-        CheckConstraint("amount > 0", name="ck_entries_amount_positive"),
-    )
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_entries_amount_positive"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -50,17 +48,14 @@ class Entry(Base):
         nullable=False,
         index=True,
     )
-    # ✍️ direction: Mapped[Direction]
-    #    hint: mapped_column(Enum(Direction, name="direction"), nullable=False)
-    #    renamed from entry_type; use name="direction" to match the renamed PG enum type
-    # ✍️ amount: Mapped[int]
-    #    hint: mapped_column(Integer, nullable=False)
-    #    changed from Numeric(18,4) to Integer (BIGINT in PostgreSQL)
-    #    stores minor currency units: 1000 = €10.00, 500 = ¥500
-    # ✍️ currency: Mapped[str]
-    #    hint: mapped_column(String(3), nullable=False)
-    #    ISO 4217 code e.g. "EUR", "USD", "JPY"
-
+    direction: Mapped[Direction] = mapped_column(
+        Enum(Direction, name="direction"),
+        nullable=False,
+    )
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False  # ISO 4217 code e.g. "EUR", "USD", "JPY"
+    )
     transaction: Mapped[Transaction] = relationship(back_populates="entries")
     account: Mapped[Account] = relationship()
 
