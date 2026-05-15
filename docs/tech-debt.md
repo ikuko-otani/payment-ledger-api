@@ -16,6 +16,7 @@ Items are added when a task is completed and something is intentionally left out
 | TD-008 | S2-3 | architecture | Repository layer is not separated: services receive AsyncSession directly and call SQLAlchemy. No ADR or ARCHITECTURE.md entry — an implicit MVP-stage omission, not intentional design. Reduces unit-testability of the service layer and is a standard interview discussion point. Refactor candidate for S3+. | Medium | S2-3 |
 | TD-009 | S2-3 | housekeeping | Root `/main.py` is a leftover from `uv init` (contains only `print("Hello from payment-ledger-api!")`). Dockerfile and conftest both reference `app/main.py`; the root file is unreferenced and safe to delete. Risk: new contributors may mistake it for the real entry point. | Low | S2-3 |
 | TD-010 | S2-3 | housekeeping | `.gitignore` is sparse: `.pytest_cache/` was committed (exclusion missed); `.idea/` / `.vscode/` IDE directories are not excluded; general Python project patterns are incomplete. `.claude/` and `flagship-goal-prompt-template.md` were added today. Full cleanup recommended before portfolio publication. | Low | S2-3 |
+| TD-011 | S2-X-2 | validation | `create_transaction` checks account existence but not `is_active` status. Posting to a deactivated account is currently allowed. Add `is_active=True` filter to the account existence query. | Medium | S2-X-2 |
 
 ## Resolved
 
