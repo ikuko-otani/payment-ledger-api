@@ -20,12 +20,14 @@ async def _create_account(
     db_session: AsyncSession,
     name: str,
     account_type: AccountType,
-    # ✍️ add: code: str, currency: str = "EUR"
+    code: str,
+    currency: str = "EUR",
 ) -> Account:
     account = Account(
-        # ✍️ add: code=code, currency=currency
         name=name,
         account_type=account_type,
+        code=code,
+        currency=currency,
     )
     db_session.add(account)
     await db_session.commit()
@@ -37,8 +39,12 @@ async def _create_account(
 async def test_create_balanced_transaction_persists_rows(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash", AccountType.ASSET)  # ✍️ add code="1100"
-    credit = await _create_account(db_session, "Revenue", AccountType.REVENUE)  # ✍️ add code="4000"
+    debit = await _create_account(
+        db_session, "Cash", AccountType.ASSET, code="1100"
+    )
+    credit = await _create_account(
+        db_session, "Revenue", AccountType.REVENUE, code="4000"
+    )
 
     payload = TransactionCreate(
         description="Balanced",
@@ -48,8 +54,8 @@ async def test_create_balanced_transaction_persists_rows(
             EntryCreate(
                 account_id=debit.id,
                 direction=Direction.DEBIT,  # ✍️ renamed from entry_type=EntryType.DEBIT
-                amount=1000,               # ✍️ int minor units (was Decimal("1000.00"))
-                currency="EUR",            # ✍️ new required field
+                amount=1000,  # ✍️ int minor units (was Decimal("1000.00"))
+                currency="EUR",  # ✍️ new required field
             ),
             EntryCreate(
                 account_id=credit.id,
@@ -69,15 +75,20 @@ async def test_create_balanced_transaction_persists_rows(
     saved = result.scalar_one()
 
     assert saved.description == "Balanced"
-    # ✍️ add assertion: saved.status == TransactionStatus.POSTED
+    from app.models.transaction import TransactionStatus
+    assert saved.status == TransactionStatus.POSTED
 
 
 @pytest.mark.asyncio
 async def test_unbalanced_transaction_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash-Unbal", AccountType.ASSET)  # ✍️ add code="1101"
-    credit = await _create_account(db_session, "Revenue-Unbal", AccountType.REVENUE)  # ✍️ add code="4001"
+    debit = await _create_account(
+        db_session, "Cash-Unbal", AccountType.ASSET, code="1101"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-Unbal", AccountType.REVENUE, code="4001"
+    )
 
     payload = TransactionCreate(
         description="Unbalanced",
@@ -126,8 +137,12 @@ async def test_transaction_create_requires_at_least_two_entries() -> None:
 async def test_transaction_response_shape_like_domain_object(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash-Resp", AccountType.ASSET)  # ✍️ add code="1102"
-    credit = await _create_account(db_session, "Revenue-Resp", AccountType.REVENUE)  # ✍️ add code="4002"
+    debit = await _create_account(
+        db_session, "Cash-Resp", AccountType.ASSET, code="1102"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-Resp", AccountType.REVENUE, code="4002"
+    )
 
     payload = TransactionCreate(
         description="Response shape",
@@ -151,7 +166,9 @@ async def test_transaction_response_shape_like_domain_object(
     tx = await create_transaction(db_session, payload)
 
     assert len(tx.entries) == 2
-    entry_directions = {entry.direction for entry in tx.entries}  # ✍️ renamed from entry.entry_type
+    entry_directions = {
+        entry.direction for entry in tx.entries
+    }  # ✍️ renamed from entry.entry_type
     assert entry_directions == {Direction.DEBIT, Direction.CREDIT}
 
 
@@ -167,7 +184,7 @@ async def test_entry_amount_zero_raises_validation_error() -> None:
         EntryCreate(
             account_id="11111111-1111-1111-1111-111111111111",
             direction=Direction.DEBIT,
-            amount=0,       # ✍️ was Decimal("0")
+            amount=0,  # ✍️ was Decimal("0")
             currency="EUR",
         )
 
@@ -179,7 +196,7 @@ async def test_entry_amount_negative_raises_validation_error() -> None:
         EntryCreate(
             account_id="11111111-1111-1111-1111-111111111111",
             direction=Direction.DEBIT,
-            amount=-100,    # ✍️ was Decimal("-100")
+            amount=-100,  # ✍️ was Decimal("-100")
             currency="EUR",
         )
 

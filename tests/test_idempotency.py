@@ -63,12 +63,10 @@ async def test_same_idempotency_key_returns_409_on_second_request(
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
-        db_session, name="Cash", account_type=AccountType.ASSET
-        # ✍️ add: code="1100"
+        db_session, name="Cash", account_type=AccountType.ASSET, code="1100"
     )
     acc_credit = await create_account(
-        db_session, name="Revenue", account_type=AccountType.REVENUE
-        # ✍️ add: code="4000"
+        db_session, name="Revenue", account_type=AccountType.REVENUE, code="4000"
     )
 
     key = str(uuid.uuid4())
@@ -113,12 +111,10 @@ async def test_different_idempotency_keys_both_succeed(
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
-        db_session, name="Cash2", account_type=AccountType.ASSET
-        # ✍️ add: code="1101"
+        db_session, name="Cash2", account_type=AccountType.ASSET, code="1101"
     )
     acc_credit = await create_account(
-        db_session, name="Revenue2", account_type=AccountType.REVENUE
-        # ✍️ add: code="4001"
+        db_session, name="Revenue2", account_type=AccountType.REVENUE, code="4001"
     )
 
     payload = {
@@ -181,12 +177,10 @@ async def test_no_idempotency_key_header_succeeds(
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
-        db_session, name="Cash3", account_type=AccountType.ASSET
-        # ✍️ add: code="1102"
+        db_session, name="Cash3", account_type=AccountType.ASSET, code="1102"
     )
     acc_credit = await create_account(
-        db_session, name="Revenue3", account_type=AccountType.REVENUE
-        # ✍️ add: code="4002"
+        db_session, name="Revenue3", account_type=AccountType.REVENUE, code="4002"
     )
 
     payload = {
