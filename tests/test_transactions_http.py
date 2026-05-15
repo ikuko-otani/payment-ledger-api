@@ -18,7 +18,6 @@ async def _seed_account(
 ) -> str:
     """Insert an account and return its id as str."""
     account = Account(
-        # ✍️ add: code=code, currency=currency
         name=name,
         account_type=account_type,
         code=code,

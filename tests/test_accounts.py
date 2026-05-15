@@ -13,7 +13,8 @@ from app.models.account import Account, AccountType
 @pytest.mark.asyncio
 async def test_create_account_persists_row(db_session: AsyncSession) -> None:
     account = Account(
-        # ✍️ add: code="1100", currency="EUR"
+        code="1100",
+        currency="EUR",
         name="Cash",
         account_type=AccountType.ASSET,
     )
@@ -25,7 +26,9 @@ async def test_create_account_persists_row(db_session: AsyncSession) -> None:
 
     assert saved.name == "Cash"
     assert saved.account_type == AccountType.ASSET
-    # ✍️ add assertions: saved.code == "1100", saved.currency == "EUR", saved.is_active is True
+    assert saved.code == "1100"
+    assert saved.currency == "EUR"
+    assert saved.is_active is True
 
 
 @pytest.mark.asyncio
@@ -33,12 +36,14 @@ async def test_list_accounts_returns_created_rows(db_session: AsyncSession) -> N
     db_session.add_all(
         [
             Account(
-                # ✍️ add: code="1100", currency="EUR"
+                code="1100",
+                currency="EUR",
                 name="Cash",
                 account_type=AccountType.ASSET,
             ),
             Account(
-                # ✍️ add: code="4000", currency="EUR"
+                code="4000",
+                currency="EUR",
                 name="Revenue",
                 account_type=AccountType.REVENUE,
             ),
@@ -58,14 +63,16 @@ async def test_duplicate_account_name_raises_integrity_error(
     db_session: AsyncSession,
 ) -> None:
     db_session.add(Account(
-        # ✍️ add: code="9001", currency="EUR"
+        code="9001",
+        currency="EUR",
         name="Duplicate",
         account_type=AccountType.ASSET,
     ))
     await db_session.commit()
 
     db_session.add(Account(
-        # ✍️ add: code="9002", currency="EUR"  ← different code, same name
+        code="9002",
+        currency="EUR",
         name="Duplicate",
         account_type=AccountType.EXPENSE,
     ))
@@ -78,7 +85,20 @@ async def test_duplicate_account_name_raises_integrity_error(
 async def test_duplicate_account_code_raises_integrity_error(
     db_session: AsyncSession,
 ) -> None:
-    # ✍️ new test: code UNIQUE constraint
-    # hint: create two accounts with same code="1100" but different names
-    #       assert IntegrityError is raised on second commit
-    ...
+    db_session.add(Account(
+        code="1100",
+        currency="EUR",
+        name="Account1",
+        account_type=AccountType.ASSET,
+    ))
+    await db_session.commit()
+
+    db_session.add(Account(
+        code="1100",
+        currency="EUR",
+        name="Account2",
+        account_type=AccountType.ASSET,
+    ))
+
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
