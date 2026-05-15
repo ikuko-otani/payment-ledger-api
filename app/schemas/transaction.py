@@ -81,7 +81,7 @@ class TransactionRead(BaseModel):
     description: str
     transaction_date: date
     # amount removed
-    # ✍️ status: TransactionStatus  — add after TransactionStatus import is in place
+    status: TransactionStatus
     created_at: datetime
     entries: list[EntryRead]
 
