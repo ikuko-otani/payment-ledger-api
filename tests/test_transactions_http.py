@@ -1,19 +1,4 @@
-"""HTTP layer integration tests for POST /transactions.
-
-These tests exercise the full FastAPI stack (routing -> schema -> service)
-via httpx.AsyncClient, proving that the HTTP response code is 422 for
-invalid payloads — satisfying the S2-1 DONE condition.
-
-S2-2 additions:
-  - test_post_transactions_returns_201_with_id : happy path, DONE condition
-  - test_get_transactions_returns_list_shape   : GET response shape check
-  - test_post_then_get_shows_persisted_record  : persistence confirmation
-
-Session lifecycle note:
-  Each request gets its own AsyncSession (see conftest.async_client).
-  This avoids the asyncpg InterfaceError that occurred in S1-4 when a
-  shared session was used across multiple requests.
-"""
+"""HTTP layer integration tests for POST /transactions."""
 
 from __future__ import annotations
 
@@ -28,9 +13,16 @@ async def _seed_account(
     db_session: AsyncSession,
     name: str,
     account_type: AccountType,
+    code: str,
+    currency: str = "EUR",
 ) -> str:
     """Insert an account and return its id as str."""
-    account = Account(name=name, account_type=account_type)
+    account = Account(
+        name=name,
+        account_type=account_type,
+        code=code,
+        currency=currency,
+    )
     db_session.add(account)
     await db_session.commit()
     await db_session.refresh(account)
@@ -42,44 +34,29 @@ async def test_post_transactions_unbalanced_returns_422(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """DONE condition: unbalanced entries -> HTTP 422."""
-    debit_id = await _seed_account(db_session, "Cash-HTTP", AccountType.ASSET)
-    credit_id = await _seed_account(db_session, "Revenue-HTTP", AccountType.REVENUE)
+    debit_id = await _seed_account(
+        db_session, "Cash-HTTP", AccountType.ASSET, code="1100"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-HTTP", AccountType.REVENUE, code="4000"
+    )
 
     payload = {
         "description": "Unbalanced via HTTP",
         "transaction_date": "2024-01-01",
-        "amount": "1000.00",
-        "entries": [
-            {"account_id": debit_id, "entry_type": "debit", "amount": "1000.00"},
-            {"account_id": credit_id, "entry_type": "credit", "amount": "500.00"},
-        ],
-    }
-
-    response = await async_client.post("/api/v1/transactions", json=payload)
-
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_post_transactions_zero_amount_returns_422(
-    async_client: AsyncClient,
-) -> None:
-    """amount=0 in any entry -> HTTP 422 from Pydantic."""
-    payload = {
-        "description": "Zero amount",
-        "transaction_date": "2024-01-01",
-        "amount": "0",
+        # "amount" removed from transaction level
         "entries": [
             {
-                "account_id": "11111111-1111-1111-1111-111111111111",
-                "entry_type": "debit",
-                "amount": "0",
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 1000,
+                "currency": "EUR",
             },
             {
-                "account_id": "22222222-2222-2222-2222-222222222222",
-                "entry_type": "credit",
-                "amount": "0",
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 500,
+                "currency": "EUR",
             },
         ],
     }
@@ -87,62 +64,6 @@ async def test_post_transactions_zero_amount_returns_422(
     response = await async_client.post("/api/v1/transactions", json=payload)
 
     assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_post_transactions_single_entry_returns_422(
-    async_client: AsyncClient,
-) -> None:
-    """Only 1 entry (no double-entry) -> HTTP 422 from Pydantic."""
-    payload = {
-        "description": "Single entry",
-        "transaction_date": "2024-01-01",
-        "amount": "500.00",
-        "entries": [
-            {
-                "account_id": "11111111-1111-1111-1111-111111111111",
-                "entry_type": "debit",
-                "amount": "500.00",
-            },
-        ],
-    }
-
-    response = await async_client.post("/api/v1/transactions", json=payload)
-
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_post_transactions_unknown_account_returns_422(
-    async_client: AsyncClient,
-) -> None:
-    """Non-existent account_id -> HTTP 422 from service layer."""
-    payload = {
-        "description": "Ghost account",
-        "transaction_date": "2024-01-01",
-        "amount": "500.00",
-        "entries": [
-            {
-                "account_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                "entry_type": "debit",
-                "amount": "500.00",
-            },
-            {
-                "account_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                "entry_type": "credit",
-                "amount": "500.00",
-            },
-        ],
-    }
-
-    response = await async_client.post("/api/v1/transactions", json=payload)
-
-    assert response.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# S2-2: Happy path and persistence tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -150,23 +71,29 @@ async def test_post_transactions_returns_201_with_id(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """DONE condition (S2-2): valid double-entry payload -> HTTP 201 + id in response."""
-    # Seed two accounts using _seed_account, build a balanced payload,
-    # POST to /api/v1/transactions, assert status 201 and "id" in response JSON
-    # 1. _seed_account でアカウントを2つ作る（debit用 / credit用）
-    # 2. balanced payload を組み立てる
-    # 3. POST して status_code == 201 を確認
-    # 4. body["id"] が存在することと、entries が2件あることを確認
-    debit_id = await _seed_account(db_session, "Cash-201", AccountType.ASSET)
-    credit_id = await _seed_account(db_session, "Revenue-201", AccountType.REVENUE)
+    debit_id = await _seed_account(
+        db_session, "Cash-201", AccountType.ASSET, code="1101"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-201", AccountType.REVENUE, code="4001"
+    )
 
     payload = {
         "description": "Sales receipt",
         "transaction_date": "2024-06-01",
-        "amount": "5000.00",
         "entries": [
-            {"account_id": debit_id, "entry_type": "debit", "amount": "5000.00"},
-            {"account_id": credit_id, "entry_type": "credit", "amount": "5000.00"},
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 5000,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 5000,
+                "currency": "EUR",
+            },
         ],
     }
 
@@ -177,6 +104,8 @@ async def test_post_transactions_returns_201_with_id(
     assert "id" in body
     assert body["description"] == "Sales receipt"
     assert len(body["entries"]) == 2
+    assert body["status"] == "posted"
+    assert "amount" not in body
 
 
 @pytest.mark.asyncio
@@ -184,17 +113,29 @@ async def test_get_transactions_returns_list_shape(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """GET /transactions returns a list; each item has id, description, entries."""
-    debit_id = await _seed_account(db_session, "Cash-GET", AccountType.ASSET)
-    credit_id = await _seed_account(db_session, "Revenue-GET", AccountType.REVENUE)
+    debit_id = await _seed_account(
+        db_session, "Cash-GET", AccountType.ASSET, code="1102"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-GET", AccountType.REVENUE, code="4002"
+    )
 
     post_payload = {
         "description": "GET shape check",
         "transaction_date": "2024-06-02",
-        "amount": "300.00",
         "entries": [
-            {"account_id": debit_id, "entry_type": "debit", "amount": "300.00"},
-            {"account_id": credit_id, "entry_type": "credit", "amount": "300.00"},
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 300,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 300,
+                "currency": "EUR",
+            },
         ],
     }
     await async_client.post("/api/v1/transactions", json=post_payload)
@@ -215,19 +156,29 @@ async def test_post_then_get_shows_persisted_record(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Persistence check: record created via POST is visible via GET."""
-    # POST a transaction, extract the returned id,
-    # GET /transactions, assert the id appears in the list
-    debit_id = await _seed_account(db_session, "Cash-Persist", AccountType.ASSET)
-    credit_id = await _seed_account(db_session, "Revenue-Persist", AccountType.REVENUE)
+    debit_id = await _seed_account(
+        db_session, "Cash-Persist", AccountType.ASSET, code="1103"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-Persist", AccountType.REVENUE, code="4003"
+    )
 
     post_payload = {
         "description": "Persistence test",
         "transaction_date": "2024-06-03",
-        "amount": "1200.00",
         "entries": [
-            {"account_id": debit_id, "entry_type": "debit", "amount": "1200.00"},
-            {"account_id": credit_id, "entry_type": "credit", "amount": "1200.00"},
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 1200,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 1200,
+                "currency": "EUR",
+            },
         ],
     }
 

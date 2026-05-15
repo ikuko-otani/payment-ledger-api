@@ -12,7 +12,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, JSON, func
+from sqlalchemy import DateTime, Enum, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -47,8 +47,11 @@ class Transaction(Base):
         default=TransactionStatus.POSTED,
     )
     # set to datetime.utcnow() in the service layer when status → POSTED
-    posted_at: Mapped[datetime | None] = mapped_column(nullable=True, default=None)
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )

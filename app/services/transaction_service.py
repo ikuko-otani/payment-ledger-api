@@ -44,10 +44,28 @@ async def create_transaction(
         )
 
     # ------------------------------------------------------------------
+    # Validate: both debit and credit directions must be present
+    # ------------------------------------------------------------------
+    directions = {e.direction for e in payload.entries}
+    if Direction.DEBIT not in directions or Direction.CREDIT not in directions:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Entries must include at least one debit and one credit",
+        )
+
+    # ------------------------------------------------------------------
+    # Validate: all entries must use the same currency
+    # ------------------------------------------------------------------
+    currencies = {e.currency for e in payload.entries}
+    if len(currencies) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"All entries must use the same currency, got: {sorted(currencies)}",
+        )
+
+    # ------------------------------------------------------------------
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
-    # 🔧 TODO: update DEBIT/CREDIT attribute access from entry_type → direction
-    # hint: replace EntryType.DEBIT → Direction.DEBIT, EntryType.CREDIT → Direction.CREDIT
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
     credit_sum = sum(
         e.amount for e in payload.entries if e.direction == Direction.CREDIT
@@ -73,9 +91,6 @@ async def create_transaction(
     db.add(transaction)
     await db.flush()
 
-    # 🔧 TODO: update Entry() instantiation
-    # hint: replace entry_type=entry.entry_type → direction=entry.direction
-    #       add currency=entry.currency
     entries = [
         Entry(
             transaction_id=transaction.id,
