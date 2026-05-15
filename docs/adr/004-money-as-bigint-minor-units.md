@@ -6,11 +6,15 @@ Accepted — implemented in Sprint S2-X-1
 
 ## Context
 
-<!-- 🔧 TODO: explain the problem with floating-point and Numeric types for money
-hint: IEEE 754 floating point cannot represent 0.1 exactly;
-      even Numeric(18,4) has an arbitrary scale that doesn't map to real currencies
-      (EUR needs 2 decimal places, JPY needs 0, some crypto needs 8)
--->
+Monetary values stored as `FLOAT` or `DOUBLE` are subject to IEEE 754
+rounding errors — `0.1 + 0.2` does not equal `0.3` in binary floating point.
+`NUMERIC(18,4)` avoids rounding but uses a fixed scale of 4 decimal places,
+which does not map to real currencies:
+- EUR needs 2
+- JPY needs 0
+- some cryptocurrencies need 8.
+
+A fixed scale either wastes storage or truncates values depending on the currency.
 
 ## Decision
 
@@ -24,11 +28,12 @@ Examples:
 
 ## Rationale
 
-<!-- 🔧 TODO: explain the benefits concisely
-hint: integer arithmetic is exact; no rounding errors;
-      matches the convention used by Stripe, Mollie, Adyen, Square
-      in their public APIs (amount=1099 means €10.99)
--->
+Integer arithmetic is exact — there are no rounding errors
+regardless of the number of operations.
+This convention is also the industry standard:
+Stripe, Mollie, Adyen, and Square all represent amounts as integers
+in their public APIs (`amount=1099` means €10.99).
+Using the same convention reduces friction when integrating with payment processors.
 
 | Approach | Rounding risk | Industry standard | Multi-currency |
 |----------|--------------|-------------------|----------------|
@@ -38,10 +43,14 @@ hint: integer arithmetic is exact; no rounding errors;
 
 ## Trade-offs
 
-<!-- 🔧 TODO: note the one real downside
-hint: you need to know the currency's decimal scale to display the amount correctly
-      (look up ISO 4217 scale table, or store scale alongside currency code)
--->
+The one real downside is that displaying a human-readable amount requires
+knowing the currency's decimal scale (ISO 4217 exponent).
+For example, dividing by 100 is correct for EUR/USD
+but wrong for JPY (scale 0) or BHD (scale 3).
+Clients must look up the scale from an ISO 4217 table or rely onthe `currency` field
+stored alongside `amount`.
+
+Currency scale management is deferred — see TD-012.
 
 ## Consequences
 

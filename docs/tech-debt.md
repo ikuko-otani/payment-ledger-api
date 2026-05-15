@@ -17,6 +17,7 @@ Items are added when a task is completed and something is intentionally left out
 | TD-009 | S2-3 | housekeeping | Root `/main.py` is a leftover from `uv init` (contains only `print("Hello from payment-ledger-api!")`). Dockerfile and conftest both reference `app/main.py`; the root file is unreferenced and safe to delete. Risk: new contributors may mistake it for the real entry point. | Low | S2-3 |
 | TD-010 | S2-3 | housekeeping | `.gitignore` is sparse: `.pytest_cache/` was committed (exclusion missed); `.idea/` / `.vscode/` IDE directories are not excluded; general Python project patterns are incomplete. `.claude/` and `flagship-goal-prompt-template.md` were added today. Full cleanup recommended before portfolio publication. | Low | S2-3 |
 | TD-011 | S2-X-2 | validation | `create_transaction` checks account existence but not `is_active` status. Posting to a deactivated account is currently allowed. Add `is_active=True` filter to the account existence query. | Medium | S2-X-2 |
+| TD-012 | S2-X-2 | architecture | No currency scale management. `entries.amount` is stored as BIGINT minor units but the scale (decimal places) per currency is not tracked. Clients must know ISO 4217 scales externally. Options: (A) hardcoded `CURRENCY_SCALES` dict, (B) `currencies` master table, (C) client responsibility. Decide before multi-currency support is expanded. | Medium | S2-X-2 |
 
 ## Resolved
 

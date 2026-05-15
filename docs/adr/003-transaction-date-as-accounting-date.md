@@ -10,29 +10,31 @@ Two separate concepts exist in ledger systems:
 
 1. **Accounting date** (`transaction_date DATE`): the business date the entry
     belongs to — determines which financial period it affects.
-2. **System timestamp** (`posted_at TIMESTAMPTZ`): the wall-clock moment the
-    record was physically written to the database.
+2. **System timestamp** (`posted_at TIMESTAMPTZ`): the wall-clock moment
+   the record was physically written to the database.
 
 The original design (`ARCHITECTURE.md`) only had `posted_at TIMESTAMPTZ`,
-which conflates these two concepts. A transaction entered on May 1st may
-legitimately belong to the April period (month-end close scenario).
+which conflates these two concepts.
+A transaction entered on May 1st may legitimately
+belong to the April period (month-end close scenario).
 
 ## Decision
 
-Keep `transaction_date DATE` as the user-supplied accounting date **and**
-add `posted_at TIMESTAMPTZ` as the system-generated commit timestamp.
+Keep `transaction_date DATE` as the user-supplied accounting date
+**and** add `posted_at TIMESTAMPTZ` as the system-generated commit timestamp.
 Both fields are stored on every transaction row.
 
 ## Rationale
 
-**Month-end close example**: An accountant enters a transaction on May 1st
+**Month-end close example**:
+An accountant enters a transaction on May 1st
 for an invoice received on April 30th.
 The accounting date is April 30 (`transaction_date = 2024-04-30`)
 so it falls in April's P&L.
 The system records `posted_at = 2024-05-01T09:32:00Z`
 as the audit trail timestamp.
-Balance queries use `WHERE transaction_date <= '2024-04-30'` to produce
-correct April figures.
+Balance queries use `WHERE transaction_date <= '2024-04-30'`
+to produce correct April figures.
 
 | Field | Type | Meaning |
 |-------|------|---------|
