@@ -62,20 +62,24 @@ async def test_list_accounts_returns_created_rows(db_session: AsyncSession) -> N
 async def test_duplicate_account_name_raises_integrity_error(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add(Account(
-        code="9001",
-        currency="EUR",
-        name="Duplicate",
-        account_type=AccountType.ASSET,
-    ))
+    db_session.add(
+        Account(
+            code="9001",
+            currency="EUR",
+            name="Duplicate",
+            account_type=AccountType.ASSET,
+        )
+    )
     await db_session.commit()
 
-    db_session.add(Account(
-        code="9002",
-        currency="EUR",
-        name="Duplicate",
-        account_type=AccountType.EXPENSE,
-    ))
+    db_session.add(
+        Account(
+            code="9002",
+            currency="EUR",
+            name="Duplicate",
+            account_type=AccountType.EXPENSE,
+        )
+    )
 
     with pytest.raises(IntegrityError):
         await db_session.commit()
@@ -85,20 +89,24 @@ async def test_duplicate_account_name_raises_integrity_error(
 async def test_duplicate_account_code_raises_integrity_error(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add(Account(
-        code="1100",
-        currency="EUR",
-        name="Account1",
-        account_type=AccountType.ASSET,
-    ))
+    db_session.add(
+        Account(
+            code="1100",
+            currency="EUR",
+            name="Account1",
+            account_type=AccountType.ASSET,
+        )
+    )
     await db_session.commit()
 
-    db_session.add(Account(
-        code="1100",
-        currency="EUR",
-        name="Account2",
-        account_type=AccountType.ASSET,
-    ))
+    db_session.add(
+        Account(
+            code="1100",
+            currency="EUR",
+            name="Account2",
+            account_type=AccountType.ASSET,
+        )
+    )
 
     with pytest.raises(IntegrityError):
         await db_session.commit()

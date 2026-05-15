@@ -39,9 +39,7 @@ async def _create_account(
 async def test_create_balanced_transaction_persists_rows(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(
-        db_session, "Cash", AccountType.ASSET, code="1100"
-    )
+    debit = await _create_account(db_session, "Cash", AccountType.ASSET, code="1100")
     credit = await _create_account(
         db_session, "Revenue", AccountType.REVENUE, code="4000"
     )
@@ -76,6 +74,7 @@ async def test_create_balanced_transaction_persists_rows(
 
     assert saved.description == "Balanced"
     from app.models.transaction import TransactionStatus
+
     assert saved.status == TransactionStatus.POSTED
 
 
