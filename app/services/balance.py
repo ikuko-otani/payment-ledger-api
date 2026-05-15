@@ -23,13 +23,26 @@ async def calculate_balance(
     Balance = SUM(debit entries) - SUM(credit entries)
     Only POSTED transactions on or before as_of.date() are included.
     """
-    # 🔧 TODO: implement — single SELECT with two conditional SUM expressions
-    #   Hint: JOIN Entry → Transaction on Entry.transaction_id == Transaction.id
-    #   Filter: Entry.account_id == account_id
-    #           Transaction.transaction_date <= as_of.date()
-    #           Transaction.status == TransactionStatus.POSTED
-    #   Aggregate:
-    #     debit_sum  = func.coalesce(func.sum(case((Entry.direction == Direction.DEBIT, Entry.amount), else_=0)), 0)
-    #     credit_sum = func.coalesce(func.sum(case((Entry.direction == Direction.CREDIT, Entry.amount), else_=0)), 0)
-    #   Return: result.scalar_one()  ← single integer value
-    raise NotImplementedError
+    result = await db.execute(
+        select(
+            func.coalesce(
+                func.sum(
+                    case((Entry.direction == Direction.DEBIT, Entry.amount), else_=0)
+                ),
+                0,
+            )
+            - func.coalesce(
+                func.sum(
+                    case((Entry.direction == Direction.CREDIT, Entry.amount), else_=0)
+                ),
+                0,
+            )
+        )
+        .join(Transaction, Entry.transaction_id == Transaction.id)
+        .where(
+            Entry.account_id == account_id,
+            Transaction.transaction_date <= as_of.date(),
+            Transaction.status == TransactionStatus.POSTED,
+        )
+    )
+    return result.scalar_one()
