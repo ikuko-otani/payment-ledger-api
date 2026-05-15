@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
-from app.models.entry import Direction  # ✍️ renamed from EntryType
+from app.models.entry import Direction
 from app.models.transaction import Transaction
 from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
@@ -51,9 +51,9 @@ async def test_create_balanced_transaction_persists_rows(
         entries=[
             EntryCreate(
                 account_id=debit.id,
-                direction=Direction.DEBIT,  # ✍️ renamed from entry_type=EntryType.DEBIT
-                amount=1000,  # ✍️ int minor units (was Decimal("1000.00"))
-                currency="EUR",  # ✍️ new required field
+                direction=Direction.DEBIT,
+                amount=1000,
+                currency="EUR",
             ),
             EntryCreate(
                 account_id=credit.id,
@@ -165,9 +165,7 @@ async def test_transaction_response_shape_like_domain_object(
     tx = await create_transaction(db_session, payload)
 
     assert len(tx.entries) == 2
-    entry_directions = {
-        entry.direction for entry in tx.entries
-    }  # ✍️ renamed from entry.entry_type
+    entry_directions = {entry.direction for entry in tx.entries}
     assert entry_directions == {Direction.DEBIT, Direction.CREDIT}
 
 
@@ -183,7 +181,7 @@ async def test_entry_amount_zero_raises_validation_error() -> None:
         EntryCreate(
             account_id="11111111-1111-1111-1111-111111111111",
             direction=Direction.DEBIT,
-            amount=0,  # ✍️ was Decimal("0")
+            amount=0,
             currency="EUR",
         )
 
@@ -195,7 +193,7 @@ async def test_entry_amount_negative_raises_validation_error() -> None:
         EntryCreate(
             account_id="11111111-1111-1111-1111-111111111111",
             direction=Direction.DEBIT,
-            amount=-100,  # ✍️ was Decimal("-100")
+            amount=-100,
             currency="EUR",
         )
 
@@ -252,3 +250,77 @@ async def test_unknown_account_id_raises_http_422(
         await create_transaction(db_session, payload)
 
     assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_all_debit_entries_raises_http_422(
+    db_session: AsyncSession,
+) -> None:
+    debit = await _create_account(
+        db_session, "Cash-AD1", AccountType.ASSET, code="1110"
+    )
+    debit2 = await _create_account(
+        db_session, "Cash-AD2", AccountType.ASSET, code="1111"
+    )
+
+    payload = TransactionCreate(
+        description="All debit",
+        transaction_date=date(2024, 1, 1),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=500,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=debit2.id,
+                direction=Direction.DEBIT,
+                amount=500,
+                currency="EUR",
+            ),
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload)
+
+    assert exc_info.value.status_code == 422
+    assert "debit" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_all_credit_entries_raises_http_422(
+    db_session: AsyncSession,
+) -> None:
+    credit = await _create_account(
+        db_session, "Revenue-AC1", AccountType.REVENUE, code="4010"
+    )
+    credit2 = await _create_account(
+        db_session, "Revenue-AC2", AccountType.REVENUE, code="4011"
+    )
+
+    payload = TransactionCreate(
+        description="All credit",
+        transaction_date=date(2024, 1, 1),
+        entries=[
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=500,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit2.id,
+                direction=Direction.CREDIT,
+                amount=500,
+                currency="EUR",
+            ),
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload)
+
+    assert exc_info.value.status_code == 422
+    assert "credit" in str(exc_info.value.detail).lower()

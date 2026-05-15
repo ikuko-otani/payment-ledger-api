@@ -77,9 +77,9 @@ async def test_same_idempotency_key_returns_409_on_second_request(
         "entries": [
             {
                 "account_id": str(acc_debit.id),
-                "direction": "debit",  # ✍️ renamed from entry_type
-                "amount": 100,  # ✍️ int minor units (was "100.00")
-                "currency": "EUR",  # ✍️ new required field
+                "direction": "debit",
+                "amount": 100,
+                "currency": "EUR",
             },
             {
                 "account_id": str(acc_credit.id),

@@ -46,6 +46,13 @@ async def create_transaction(
     # ------------------------------------------------------------------
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
+    directions = {e.direction for e in payload.entries}
+    if Direction.DEBIT not in directions or Direction.CREDIT not in directions:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Entries must include at least one debit and one credit",
+        )
+
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
     credit_sum = sum(
         e.amount for e in payload.entries if e.direction == Direction.CREDIT
