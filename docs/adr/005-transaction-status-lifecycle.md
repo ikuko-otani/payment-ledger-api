@@ -6,12 +6,16 @@ Accepted — implemented in Sprint S2-X-1
 
 ## Context
 
-<!-- 🔧 TODO: explain why a status field is needed on an immutable ledger
-hint: ADR-004 says transactions are never deleted or updated after POSTED;
-      but we need a way to mark a transaction as cancelled without deleting it.
-      Also, some systems have a two-phase commit (create PENDING, then POST)
-      to support approval workflows.
--->
+An immutable ledger never deletes or updates posted transactions (ADR-004).
+However, real-world accounting requires a way to cancel a transaction — for
+example, when an invoice is disputed or a payment is reversed.
+Without astatus field, cancellation would require physical deletion,
+which destroys the audit trail.
+
+Additionally, some systems require an approval step
+before a transaction affects balances
+(two-phase commit: create as PENDING, then POST after approval).
+A status field enables this workflow without schema changes.
 
 ## Decision
 
@@ -28,12 +32,11 @@ PENDING ──► POSTED ──► VOIDED
           (created here in MVP)
 ```
 
-<!-- 🔧 TODO: explain what each state means
-hint:
-  PENDING  = created but not yet committed to the ledger (future: approval workflows)
-  POSTED   = committed; entries affect balances; immutable
-  VOIDED   = cancelled; a paired reversal transaction is created (not deleted)
--->
+| Status | Meaning |
+|--------|---------|
+| `PENDING` | Created but not yet committed to the ledger. Entries do not affect balances. Reserved for future approval workflows.|
+| `POSTED` | Committed to the ledger. Entries affect balances. Immutable — never updated or deleted. |
+| `VOIDED` | Cancelled. A paired reversal transaction with opposite entry signs is created. The original transaction remains intact for audit purposes. |
 
 ## Rationale
 
