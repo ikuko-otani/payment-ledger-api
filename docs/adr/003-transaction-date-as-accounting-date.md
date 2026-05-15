@@ -6,26 +6,33 @@ Accepted — implemented in Sprint S2-X-1
 
 ## Context
 
-<!-- 🔧 TODO: explain the problem this decision addresses
-hint: two separate concepts exist in ledger systems —
-  (1) the business/accounting date (which period the entry belongs to)
-  (2) the system timestamp (when the record was physically created)
-ARCHITECTURE.md's original design only had posted_at TIMESTAMPTZ, missing (1).
--->
+Two separate concepts exist in ledger systems:
+
+1. **Accounting date** (`transaction_date DATE`): the business date the entry
+    belongs to — determines which financial period it affects.
+2. **System timestamp** (`posted_at TIMESTAMPTZ`): the wall-clock moment the
+    record was physically written to the database.
+
+The original design (`ARCHITECTURE.md`) only had `posted_at TIMESTAMPTZ`,
+which conflates these two concepts. A transaction entered on May 1st may
+legitimately belong to the April period (month-end close scenario).
 
 ## Decision
 
-<!-- 🔧 TODO: state the decision clearly
-hint: keep transaction_date DATE (accounting date) AND add posted_at TIMESTAMPTZ (system timestamp)
--->
+Keep `transaction_date DATE` as the user-supplied accounting date **and**
+add `posted_at TIMESTAMPTZ` as the system-generated commit timestamp.
+Both fields are stored on every transaction row.
 
 ## Rationale
 
-<!-- 🔧 TODO: explain why both fields are needed with a concrete example
-hint: month-end close scenario — a transaction entered on May 1 may be
-      dated April 30 for accounting purposes (the period it belongs to)
-      posted_at records the exact moment it was committed to the ledger
--->
+**Month-end close example**: An accountant enters a transaction on May 1st
+for an invoice received on April 30th.
+The accounting date is April 30 (`transaction_date = 2024-04-30`)
+so it falls in April's P&L.
+The system records `posted_at = 2024-05-01T09:32:00Z`
+as the audit trail timestamp.
+Balance queries use `WHERE transaction_date <= '2024-04-30'` to produce
+correct April figures.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -35,9 +42,12 @@ hint: month-end close scenario — a transaction entered on May 1 may be
 
 ## Analogy to Traditional Accounting Systems
 
-<!-- 🔧 TODO: reference the SAP/Oracle equivalent field names
-hint: SAP calls these Belegdatum (document date) and Buchungsdatum (posting date)
--->
+SAP uses the same two-field pattern under different names:
+
+| This system | SAP field | SAP name (DE) |
+|-------------|-----------|----------------|
+| `transaction_date` | `BLDAT` | Belegdatum (document date) |
+| `posted_at` | `BUDAT` | Buchungsdatum (posting date) |
 
 ## Consequences
 
