@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.account import Account
 from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
+from app.services.balance import calculate_balance
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -41,8 +42,7 @@ async def create_account(payload: AccountCreate, db: DbDep) -> Account:
 
 @router.get("/{id}/balance", response_model=BalanceResponse)
 async def get_account_balance(
-    id: uuid.UUID,
-    as_of: datetime,
+    id: uuid.UUID, as_of: datetime, db: DbDep
 ) -> BalanceResponse:
-    # stub: balance is now int (BIGINT minor units); real query implemented in S2-6
-    return BalanceResponse(balance=0, as_of=as_of)
+    balance = await calculate_balance(db, id, as_of)
+    return BalanceResponse(balance=balance, as_of=as_of)
