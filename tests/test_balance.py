@@ -13,12 +13,12 @@ from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction, TransactionStatus
 from app.services.balance import calculate_balance
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-# 📋 Copy-paste: same pattern as test_transactions.py _create_account
+
+# Same pattern as test_transactions.py _create_account
 async def _create_account(
     db: AsyncSession,
     code: str,
@@ -26,14 +26,16 @@ async def _create_account(
     account_type: AccountType,
     currency: str = "EUR",
 ) -> Account:
-    account = Account(code=code, name=name, account_type=account_type, currency=currency)
+    account = Account(
+        code=code, name=name, account_type=account_type, currency=currency
+    )
     db.add(account)
     await db.commit()
     await db.refresh(account)
     return account
 
 
-# 📋 Copy-paste: build a POSTED transaction with two entries (debit + credit)
+# Build a POSTED transaction with two entries (debit + credit)
 async def _create_posted_transaction(
     db: AsyncSession,
     debit_account: Account,
@@ -49,22 +51,24 @@ async def _create_posted_transaction(
     )
     db.add(tx)
     await db.flush()
-    db.add_all([
-        Entry(
-            transaction_id=tx.id,
-            account_id=debit_account.id,
-            direction=Direction.DEBIT,
-            amount=amount,
-            currency=currency,
-        ),
-        Entry(
-            transaction_id=tx.id,
-            account_id=credit_account.id,
-            direction=Direction.CREDIT,
-            amount=amount,
-            currency=currency,
-        ),
-    ])
+    db.add_all(
+        [
+            Entry(
+                transaction_id=tx.id,
+                account_id=debit_account.id,
+                direction=Direction.DEBIT,
+                amount=amount,
+                currency=currency,
+            ),
+            Entry(
+                transaction_id=tx.id,
+                account_id=credit_account.id,
+                direction=Direction.CREDIT,
+                amount=amount,
+                currency=currency,
+            ),
+        ]
+    )
     await db.commit()
     await db.refresh(tx)
     return tx
@@ -74,40 +78,102 @@ async def _create_posted_transaction(
 # Service layer tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_balance_single_debit_equals_amount(db_session: AsyncSession) -> None:
-    # 🔧 TODO: create debit_account (ASSET) and credit_account (LIABILITY)
-    #   post a transaction of 1000 on date(2026, 1, 10)
-    #   call calculate_balance(db_session, debit_account.id, datetime(2026, 1, 31, tzinfo=timezone.utc))
-    #   assert result == 1000
-    raise NotImplementedError
+    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
+    revenue = await _create_account(db_session, "4001", "Revenue", AccountType.REVENUE)
+
+    await _create_posted_transaction(
+        db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 10)
+    )
+
+    result = await calculate_balance(
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+    )
+    assert result == 1000
 
 
 @pytest.mark.asyncio
-async def test_balance_excludes_transaction_after_as_of(db_session: AsyncSession) -> None:
-    # 🔧 TODO: create accounts, post one tx on date(2026, 1, 10) and another on date(2026, 2, 1)
-    #   call calculate_balance with as_of = datetime(2026, 1, 31, tzinfo=timezone.utc)
-    #   assert only the first tx is reflected (second is excluded)
-    raise NotImplementedError
+async def test_balance_excludes_transaction_after_as_of(
+    db_session: AsyncSession,
+) -> None:
+    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
+    revenue = await _create_account(db_session, "4001", "Revenue", AccountType.REVENUE)
+
+    await _create_posted_transaction(
+        db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 31)
+    )
+    await _create_posted_transaction(
+        db_session, cash, revenue, amount=500, transaction_date=date(2026, 2, 1)
+    )
+
+    result = await calculate_balance(
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+    )
+    assert result == 1000  # assert only the first tx is reflected (second is excluded)
 
 
 @pytest.mark.asyncio
 async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> None:
-    # 🔧 TODO: create accounts, post one POSTED tx and one VOIDED tx (both within as_of range)
-    #   assert only POSTED amount is in balance (VOIDED is excluded)
-    raise NotImplementedError
+    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
+    revenue = await _create_account(db_session, "4001", "Revenue", AccountType.REVENUE)
+
+    await _create_posted_transaction(
+        db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 10)
+    )
+
+    # VOIDED tx (within as_of range)
+    voided_tx = Transaction(
+        description="voided tx",
+        transaction_date=date(2026, 1, 15),
+        status=TransactionStatus.VOIDED,
+    )
+    db_session.add(voided_tx)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Entry(
+                transaction_id=voided_tx.id,
+                account_id=cash.id,
+                direction=Direction.DEBIT,
+                amount=200,
+                currency="EUR",
+            ),
+            Entry(
+                transaction_id=voided_tx.id,
+                account_id=revenue.id,
+                direction=Direction.CREDIT,
+                amount=200,
+                currency="EUR",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await calculate_balance(
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+    )
+    assert (
+        result == 1000
+    )  # assert only POSTED amount is in balance (VOIDED is excluded)
 
 
 @pytest.mark.asyncio
 async def test_balance_no_transactions_returns_zero(db_session: AsyncSession) -> None:
-    # 🔧 TODO: create an account with no transactions
-    #   assert calculate_balance returns 0
-    raise NotImplementedError
+    # Create an account with no transactions
+    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
+
+    result = await calculate_balance(
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+    )
+    assert result == 0
 
 
 # ---------------------------------------------------------------------------
 # HTTP endpoint tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_balance_endpoint_returns_correct_value(
