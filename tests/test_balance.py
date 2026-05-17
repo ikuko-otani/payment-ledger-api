@@ -180,8 +180,58 @@ async def test_get_balance_endpoint_returns_correct_value(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    # 🔧 TODO: create accounts via POST /accounts, post a transaction via POST /transactions
-    #   GET /accounts/{id}/balance?as_of=2026-01-31T00:00:00
-    #   assert response.status_code == 200
-    #   assert response.json()["balance"] == <expected int>
-    raise NotImplementedError
+    # Create accounts via POST /accounts
+    resp = await async_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1101",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    resp = await async_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "4000",
+            "name": "Revenue",
+            "account_type": "revenue",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    revenue_id = resp.json()["id"]
+
+    # Post a transaction via POST /transactions
+    resp = await async_client.post(
+        "/api/v1/transactions",
+        json={
+            "description": "test sale",
+            "transaction_date": "2026-01-10",
+            "entries": [
+                {
+                    "account_id": cash_id,
+                    "direction": "debit",
+                    "amount": 2500,
+                    "currency": "EUR",
+                },
+                {
+                    "account_id": revenue_id,
+                    "direction": "credit",
+                    "amount": 2500,
+                    "currency": "EUR",
+                },
+            ],
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = await async_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2026-01-31T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["balance"] == 2500
