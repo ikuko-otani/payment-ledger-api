@@ -12,7 +12,6 @@ from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction, TransactionStatus
 
 
-# ✍️ Write the function signature (async def, 3 params → int return type)
 async def calculate_balance(
     db: AsyncSession,
     account_id: uuid.UUID,
