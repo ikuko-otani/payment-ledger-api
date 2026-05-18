@@ -22,6 +22,7 @@ dev = [
   "anyio>=4.4",
   "pytest-cov>=7.1.0",
   "ruff>=0.9",
+  "mypy>=2.1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -34,6 +35,20 @@ exclude = ["alembic/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = [
+    "app.db.session",
+    "app.services.balance",
+    "app.models.transaction",
+    "app.dependencies.idempotency",
+]
+ignore_errors = true
 
 [tool.uv]
 link-mode = "copy"
