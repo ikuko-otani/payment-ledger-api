@@ -9,8 +9,8 @@ from app.db.base import Base
 
 class UserRole(str, enum.Enum):
     """Allowed roles for application users."""
-
-    pass
+    ADMIN = "admin"
+    AUDITOR = "auditor"
 
 
 class User(Base):
