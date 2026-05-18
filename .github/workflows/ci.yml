@@ -27,6 +27,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql+asyncpg://notused/notused"
     steps:
       - uses: actions/checkout@v4
 
