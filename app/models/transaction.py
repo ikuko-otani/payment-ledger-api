@@ -12,7 +12,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, JSON, func
+from sqlalchemy import JSON, DateTime, Enum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base

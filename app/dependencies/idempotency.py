@@ -9,14 +9,13 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException, status
 
 from app.core.config import settings
-
-import uuid
 
 # TTL for idempotency keys in Redis (24 hours)
 _IDEMPOTENCY_TTL_SECONDS = 86_400

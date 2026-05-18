@@ -21,10 +21,19 @@ dev = [
   "testcontainers[postgres]>=4.8",
   "anyio>=4.4",
   "pytest-cov>=7.1.0",
+  "ruff>=0.9",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["alembic/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [tool.uv]
 link-mode = "copy"

@@ -10,16 +10,15 @@ PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from fastapi import HTTPException, status
-
-from datetime import datetime, timezone
-
 from app.models.account import Account
-from app.models.entry import Entry, Direction
+from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction, TransactionStatus
 from app.schemas.transaction import TransactionCreate
 
@@ -50,7 +49,7 @@ async def create_transaction(
     if Direction.DEBIT not in directions or Direction.CREDIT not in directions:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Entries must include at least one debit and one credit",
+            detail="Entries must include at least one debit and one credit",
         )
 
     # ------------------------------------------------------------------

@@ -12,7 +12,6 @@ from testcontainers.redis import RedisContainer
 
 from app.dependencies.idempotency import get_redis
 from app.main import app as fastapi_app
-
 from app.models.account import AccountType
 
 # ---------------------------------------------------------------------------

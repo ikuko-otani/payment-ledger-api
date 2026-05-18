@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
-from typing import AsyncGenerator as AG
 
 import pytest
 import pytest_asyncio
-from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -20,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from testcontainers.postgres import PostgresContainer
 
+from alembic import command as alembic_command
 from app.db.session import get_db
 from app.main import app as fastapi_app
 
