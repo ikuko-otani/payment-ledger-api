@@ -6,5 +6,6 @@ which is required for Alembic autogenerate to work correctly.
 from app.models.account import Account, AccountType
 from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction
+from app.models.user import User, UserRole
 
-__all__ = ["Account", "AccountType", "Entry", "Direction", "Transaction"]
+__all__ = ["Account", "AccountType", "Entry", "Direction", "Transaction", "User", "UserRole"]
