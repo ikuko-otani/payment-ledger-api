@@ -54,7 +54,8 @@ class Entry(Base):
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(
-        String(3), nullable=False  # ISO 4217 code e.g. "EUR", "USD", "JPY"
+        String(3),
+        nullable=False,  # ISO 4217 code e.g. "EUR", "USD", "JPY"
     )
     transaction: Mapped[Transaction] = relationship(back_populates="entries")
     account: Mapped[Account] = relationship()

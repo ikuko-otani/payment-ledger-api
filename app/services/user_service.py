@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate
-
-from fastapi import HTTPException, status
-from sqlalchemy import select
 
 
 async def create_user(
@@ -32,6 +31,6 @@ async def create_user(
     user = User(email=payload.email, hashed_password=hashed, role=role)
     db.add(user)
     await db.flush()
-    await db.refresh()
+    await db.refresh(user)
 
     return user

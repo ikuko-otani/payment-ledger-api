@@ -34,12 +34,8 @@ async def test_post_transactions_unbalanced_returns_422(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    debit_id = await _seed_account(
-        db_session, "Cash-HTTP", AccountType.ASSET, code="1100"
-    )
-    credit_id = await _seed_account(
-        db_session, "Revenue-HTTP", AccountType.REVENUE, code="4000"
-    )
+    debit_id = await _seed_account(db_session, "Cash-HTTP", AccountType.ASSET, code="1100")
+    credit_id = await _seed_account(db_session, "Revenue-HTTP", AccountType.REVENUE, code="4000")
 
     payload = {
         "description": "Unbalanced via HTTP",
@@ -71,12 +67,8 @@ async def test_post_transactions_returns_201_with_id(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    debit_id = await _seed_account(
-        db_session, "Cash-201", AccountType.ASSET, code="1101"
-    )
-    credit_id = await _seed_account(
-        db_session, "Revenue-201", AccountType.REVENUE, code="4001"
-    )
+    debit_id = await _seed_account(db_session, "Cash-201", AccountType.ASSET, code="1101")
+    credit_id = await _seed_account(db_session, "Revenue-201", AccountType.REVENUE, code="4001")
 
     payload = {
         "description": "Sales receipt",
@@ -113,12 +105,8 @@ async def test_get_transactions_returns_list_shape(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    debit_id = await _seed_account(
-        db_session, "Cash-GET", AccountType.ASSET, code="1102"
-    )
-    credit_id = await _seed_account(
-        db_session, "Revenue-GET", AccountType.REVENUE, code="4002"
-    )
+    debit_id = await _seed_account(db_session, "Cash-GET", AccountType.ASSET, code="1102")
+    credit_id = await _seed_account(db_session, "Revenue-GET", AccountType.REVENUE, code="4002")
 
     post_payload = {
         "description": "GET shape check",
@@ -156,12 +144,8 @@ async def test_post_then_get_shows_persisted_record(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    debit_id = await _seed_account(
-        db_session, "Cash-Persist", AccountType.ASSET, code="1103"
-    )
-    credit_id = await _seed_account(
-        db_session, "Revenue-Persist", AccountType.REVENUE, code="4003"
-    )
+    debit_id = await _seed_account(db_session, "Cash-Persist", AccountType.ASSET, code="1103")
+    credit_id = await _seed_account(db_session, "Revenue-Persist", AccountType.REVENUE, code="4003")
 
     post_payload = {
         "description": "Persistence test",
