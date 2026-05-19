@@ -17,7 +17,5 @@ async def register_user(
     payload: UserCreate,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    # TODO: implement — call user_service.create_user(db, payload)
-    #   hint: wrap in try/except to catch HTTPException from service layer
-    #   return the UserResponse directly (Pydantic from_attributes handles conversion)
-    raise NotImplementedError
+    # Return the UserResponse directly (Pydantic from_attributes handles conversion)
+    return await user_service.create_user(db, payload)
