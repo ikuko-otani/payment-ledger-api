@@ -8,22 +8,30 @@ from app.core.security import get_password_hash
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate
 
+from fastapi import HTTPException, status
+from sqlalchemy import select
+
 
 async def create_user(
     db: AsyncSession,
     payload: UserCreate,
     role: UserRole = UserRole.AUDITOR,
 ) -> User:
-    # TODO: implement — query for existing user by email
-    #   hint: `select(User).where(User.email == payload.email)`
-    #   if found: raise HTTPException(status_code=409, detail="Email already registered")
+    # Query for existing user by email
+    result = await db.execute(select(User).where(User.email == payload.email))
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
 
-    # TODO: implement — hash the password
-    #   hint: `hashed = get_password_hash(payload.password)`
+    # Hash the password
+    hashed = get_password_hash(payload.password)
 
-    # TODO: implement — create User ORM object, add to session, flush, refresh
-    #   hint: User(email=..., hashed_password=..., role=role)
-    #   then: db.add(user), await db.flush(), await db.refresh(user)
+    # Create User ORM object, add to session, flush, refresh
+    user = User(email=payload.email, hashed_password=hashed, role=role)
+    db.add(user)
+    await db.flush()
+    await db.refresh()
 
-    # TODO: remove placeholder and return the created user
-    raise NotImplementedError
+    return user
