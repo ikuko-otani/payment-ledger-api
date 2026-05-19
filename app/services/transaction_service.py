@@ -66,16 +66,12 @@ async def create_transaction(
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
-    credit_sum = sum(
-        e.amount for e in payload.entries if e.direction == Direction.CREDIT
-    )
+    credit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.CREDIT)
 
     if debit_sum != credit_sum:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"Entries are not balanced: " f"debit={debit_sum} credit={credit_sum}"
-            ),
+            detail=(f"Entries are not balanced: debit={debit_sum} credit={credit_sum}"),
         )
 
     # ------------------------------------------------------------------

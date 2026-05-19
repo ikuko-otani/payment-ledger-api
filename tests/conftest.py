@@ -36,9 +36,9 @@ def migrated_database_urls(
     """Run Alembic once and provide sync/async DB URLs."""
     raw_url = postgres_container.get_connection_url()
 
-    sync_url = raw_url.replace(
-        "postgresql+psycopg2://", "postgresql+psycopg://", 1
-    ).replace("postgresql://", "postgresql+psycopg://", 1)
+    sync_url = raw_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1).replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
     async_url = sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
 
     cfg = AlembicConfig("alembic.ini")
@@ -64,16 +64,12 @@ async def engine(
 async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     """Clean tables before and after each test."""
     async with engine.begin() as conn:
-        await conn.execute(
-            text("TRUNCATE TABLE entries, transactions, accounts CASCADE")
-        )
+        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
 
     yield
 
     async with engine.begin() as conn:
-        await conn.execute(
-            text("TRUNCATE TABLE entries, transactions, accounts CASCADE")
-        )
+        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
 
 
 @pytest_asyncio.fixture()

@@ -26,9 +26,7 @@ async def _create_account(
     account_type: AccountType,
     currency: str = "EUR",
 ) -> Account:
-    account = Account(
-        code=code, name=name, account_type=account_type, currency=currency
-    )
+    account = Account(code=code, name=name, account_type=account_type, currency=currency)
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -154,9 +152,7 @@ async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> 
     result = await calculate_balance(
         db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
     )
-    assert (
-        result == 1000
-    )  # assert only POSTED amount is in balance (VOIDED is excluded)
+    assert result == 1000  # assert only POSTED amount is in balance (VOIDED is excluded)
 
 
 @pytest.mark.asyncio
