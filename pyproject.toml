@@ -12,7 +12,6 @@ dependencies = [
   "python-dotenv>=1.2.2",
   "redis[hiredis]>=5.0",
   "bcrypt>=5.0.0",
-  "passlib[bcrypt]>=1.7.4",
 ]
 
 [dependency-groups]
