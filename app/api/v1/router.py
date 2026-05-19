@@ -2,8 +2,9 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import accounts, transactions
+from app.api.v1.routes import accounts, transactions, users
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(accounts.router)
 api_router.include_router(transactions.router)
+api_router.include_router(users.router)

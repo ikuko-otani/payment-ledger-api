@@ -65,14 +65,14 @@ async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     """Clean tables before and after each test."""
     async with engine.begin() as conn:
         await conn.execute(
-            text("TRUNCATE TABLE entries, transactions, accounts CASCADE")
+            text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE")
         )
 
     yield
 
     async with engine.begin() as conn:
         await conn.execute(
-            text("TRUNCATE TABLE entries, transactions, accounts CASCADE")
+            text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE")
         )
 
 

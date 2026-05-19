@@ -1,0 +1,23 @@
+"""User registration endpoint."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db
+from app.schemas.user import UserCreate, UserResponse
+from app.services import user_service
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register_user(
+    payload: UserCreate,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    # TODO: implement — call user_service.create_user(db, payload)
+    #   hint: wrap in try/except to catch HTTPException from service layer
+    #   return the UserResponse directly (Pydantic from_attributes handles conversion)
+    raise NotImplementedError
