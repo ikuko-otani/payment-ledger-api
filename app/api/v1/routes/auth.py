@@ -19,7 +19,12 @@ async def login(
     payload: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    # 🔧 TODO: implement
-    # hint: query User by email → verify_password → create_access_token({"sub": str(user.id)})
-    # on any failure, raise HTTPException(status_code=401, detail="Incorrect email or password")
-    ...
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user is None or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+    token = create_access_token({"sub": str(user.id)})
+    return TokenResponse(access_token=token, token_type="bearer")
