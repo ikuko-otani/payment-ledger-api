@@ -1,6 +1,13 @@
-"""Password hashing utilities using passlib/bcrypt."""
+"""Password hashing and JWT utilities."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
+from jose import jwt
+
+from app.core.config import settings
 
 
 def get_password_hash(password: str) -> str:
@@ -12,3 +19,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8"),
     )
+
+
+def create_access_token(data: dict[str, object]) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    to_encode["exp"] = expire
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)

@@ -66,7 +66,9 @@ async def create_transaction(
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
-    credit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.CREDIT)
+    credit_sum = sum(
+        e.amount for e in payload.entries if e.direction == Direction.CREDIT
+    )
 
     if debit_sum != credit_sum:
         raise HTTPException(
@@ -99,9 +101,9 @@ async def create_transaction(
     db.add_all(entries)
     await db.flush()
 
-    result = await db.execute(
+    tx_result = await db.execute(
         select(Transaction)
         .where(Transaction.id == transaction.id)
         .options(selectinload(Transaction.entries))
     )
-    return result.scalar_one()
+    return tx_result.scalar_one()
