@@ -12,7 +12,9 @@ async def _register_and_login(
     password: str = "secret123",
 ) -> str:
     """Register a user and return a valid JWT access token."""
-    await async_client.post("/api/v1/users", json={"email": email, "password": password})
+    await async_client.post(
+        "/api/v1/users", json={"email": email, "password": password}
+    )
     response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
@@ -22,8 +24,15 @@ async def _register_and_login(
 
 def _expired_token() -> str:
     """Return a syntactically valid but expired JWT."""
-    # TODO: implement (hint: jose.jwt.encode with exp = datetime.now(utc) - timedelta(minutes=1))
-    raise NotImplementedError
+    from datetime import datetime, timedelta, timezone
+    from jose import jwt as jose_jwt
+    from app.core.config import settings
+
+    payload = {
+        "sub": "00000000-0000-0000-0000-000000000000",
+        "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+    }
+    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
 @pytest.mark.asyncio
@@ -36,12 +45,18 @@ async def test_no_token_returns_401(async_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_valid_token_returns_200(async_client: AsyncClient) -> None:
     """GET /accounts with a valid Bearer token must return 200."""
-    # TODO: implement (hint: _register_and_login → Authorization header → assert 200)
-    raise NotImplementedError
+    token = await _register_and_login(async_client)
+    response = await async_client.get(
+        "/api/v1/accounts", headers={"Authorization": f"Bearder {token}"}
+    )
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_expired_token_returns_401(async_client: AsyncClient) -> None:
     """GET /accounts with an expired token must return 401."""
-    # TODO: implement (hint: _expired_token() → Authorization header → assert 401)
-    raise NotImplementedError
+    token = _expired_token()
+    response = await async_client.get(
+        "/api/v1/accounts", headers={"Authorization": f"Bearder {token}"}
+    )
+    assert response.status_code == 401
