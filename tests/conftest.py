@@ -21,6 +21,10 @@ from alembic import command as alembic_command
 from app.db.session import get_db
 from app.main import app as fastapi_app
 
+import uuid
+from app.core.deps import get_current_user
+from app.models.user import User, UserRole
+
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Generator[PostgresContainer, None, None]:
@@ -36,9 +40,9 @@ def migrated_database_urls(
     """Run Alembic once and provide sync/async DB URLs."""
     raw_url = postgres_container.get_connection_url()
 
-    sync_url = raw_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1).replace(
-        "postgresql://", "postgresql+psycopg://", 1
-    )
+    sync_url = raw_url.replace(
+        "postgresql+psycopg2://", "postgresql+psycopg://", 1
+    ).replace("postgresql://", "postgresql+psycopg://", 1)
     async_url = sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
 
     cfg = AlembicConfig("alembic.ini")
@@ -64,12 +68,16 @@ async def engine(
 async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     """Clean tables before and after each test."""
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
+        await conn.execute(
+            text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE")
+        )
 
     yield
 
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
+        await conn.execute(
+            text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE")
+        )
 
 
 @pytest_asyncio.fixture()
@@ -116,9 +124,47 @@ async def async_client(
                 await session.rollback()
                 raise
 
+    # get_current_user を常に固定ユーザーで返す mock
+    async def override_get_current_user() -> User:
+        return User(
+            id=uuid.uuid4(),
+            email="fixture@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
     transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient without get_current_user override — for testing auth itself."""
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    # get_current_user は override しない → 実際の JWT 検証が走る
+
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 

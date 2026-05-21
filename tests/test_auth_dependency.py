@@ -12,7 +12,9 @@ async def _register_and_login(
     password: str = "secret123",
 ) -> str:
     """Register a user and return a valid JWT access token."""
-    await async_client.post("/api/v1/users", json={"email": email, "password": password})
+    await async_client.post(
+        "/api/v1/users", json={"email": email, "password": password}
+    )
     response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
@@ -36,27 +38,27 @@ def _expired_token() -> str:
 
 
 @pytest.mark.asyncio
-async def test_no_token_returns_401(async_client: AsyncClient) -> None:
+async def test_no_token_returns_401(unauthed_client: AsyncClient) -> None:
     """GET /accounts without Authorization header must return 401."""
-    response = await async_client.get("/api/v1/accounts")
+    response = await unauthed_client.get("/api/v1/accounts")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_valid_token_returns_200(async_client: AsyncClient) -> None:
+async def test_valid_token_returns_200(unauthed_client: AsyncClient) -> None:
     """GET /accounts with a valid Bearer token must return 200."""
-    token = await _register_and_login(async_client)
-    response = await async_client.get(
+    token = await _register_and_login(unauthed_client)
+    response = await unauthed_client.get(
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_expired_token_returns_401(async_client: AsyncClient) -> None:
+async def test_expired_token_returns_401(unauthed_client: AsyncClient) -> None:
     """GET /accounts with an expired token must return 401."""
     token = _expired_token()
-    response = await async_client.get(
+    response = await unauthed_client.get(
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 401
