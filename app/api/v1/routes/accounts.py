@@ -42,6 +42,8 @@ async def create_account(payload: AccountCreate, db: DbDep, _current_user: Curre
 
 
 @router.get("/{id}/balance", response_model=BalanceResponse)
-async def get_account_balance(id: uuid.UUID, as_of: datetime, db: DbDep, _current_user: CurrentUser) -> BalanceResponse:
+async def get_account_balance(
+    id: uuid.UUID, as_of: datetime, db: DbDep, _current_user: CurrentUser
+) -> BalanceResponse:
     balance = await calculate_balance(db, id, as_of)
     return BalanceResponse(balance=balance, as_of=as_of)

@@ -44,9 +44,7 @@ async def test_register_user_password_is_hashed_in_db(
         "/api/v1/users",
         json={"email": "carol@example.com", "password": "plaintext"},
     )
-    result = await db_session.execute(
-        select(User).where(User.email == "carol@example.com")
-    )
+    result = await db_session.execute(select(User).where(User.email == "carol@example.com"))
     user = result.scalar_one()
     assert user.hashed_password != "plaintext"
     assert user.hashed_password.startswith("$2b$")
