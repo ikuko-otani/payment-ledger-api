@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncGenerator, Generator
 
 import pytest
@@ -18,8 +19,10 @@ from sqlalchemy.ext.asyncio import (
 from testcontainers.postgres import PostgresContainer
 
 from alembic import command as alembic_command
+from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.main import app as fastapi_app
+from app.models.user import User, UserRole
 
 
 @pytest.fixture(scope="session")
@@ -116,9 +119,47 @@ async def async_client(
                 await session.rollback()
                 raise
 
+    # get_current_user を常に固定ユーザーで返す mock
+    async def override_get_current_user() -> User:
+        return User(
+            id=uuid.uuid4(),
+            email="fixture@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
     transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient without get_current_user override — for testing auth itself."""
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    # get_current_user は override しない → 実際の JWT 検証が走る
+
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 

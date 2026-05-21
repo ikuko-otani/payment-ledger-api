@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.deps import CurrentUser
 from app.db.session import get_db
 from app.dependencies.idempotency import IdempotencyDep
 from app.models.transaction import Transaction
@@ -21,7 +22,7 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("", response_model=list[TransactionRead])
-async def list_transactions(db: DbDep) -> list[Transaction]:
+async def list_transactions(db: DbDep, _current_user: CurrentUser) -> list[Transaction]:
     result = await db.execute(
         # 💡 selectinload: Transaction を取得するとき entries も一緒にロードする。
         #    N+1 問題を避けるための eager loading。
@@ -34,7 +35,8 @@ async def list_transactions(db: DbDep) -> list[Transaction]:
 async def post_transaction(
     payload: TransactionCreate,
     db: DbDep,
-    _: IdempotencyDep,  # 💡 Depends only — no value needed in the handler body
+    _: IdempotencyDep,
+    _current_user: CurrentUser,
 ) -> Transaction:
     # create_transaction サービスを呼び出して返す
     return await create_transaction(db, payload)
