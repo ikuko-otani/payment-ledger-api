@@ -12,9 +12,7 @@ async def _register_and_login(
     password: str = "secret123",
 ) -> str:
     """Register a user and return a valid JWT access token."""
-    await async_client.post(
-        "/api/v1/users", json={"email": email, "password": password}
-    )
+    await async_client.post("/api/v1/users", json={"email": email, "password": password})
     response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
