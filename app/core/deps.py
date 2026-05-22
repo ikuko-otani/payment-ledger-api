@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -39,7 +39,32 @@ async def get_current_user(
     user = user_result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+    if not user.is_active:
+        raise credentials_exception  # not 403
     return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def require_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    return current_user
+
+
+async def require_auditor_or_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role not in {UserRole.ADMIN, UserRole.AUDITOR}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Auditor or admin role required",
+        )
+    return current_user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]
+AuditorOrAdminUser = Annotated[User, Depends(require_auditor_or_admin)]

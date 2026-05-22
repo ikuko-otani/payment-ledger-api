@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import CurrentUser
+from app.core.deps import AdminUser, AuditorOrAdminUser
 from app.db.session import get_db
 from app.models.account import Account
 from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
@@ -22,13 +22,13 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("", response_model=list[AccountRead])
-async def list_accounts(db: DbDep, _current_user: CurrentUser) -> list[Account]:
+async def list_accounts(db: DbDep, _current_user: AuditorOrAdminUser) -> list[Account]:
     result = await db.execute(select(Account))
     return list(result.scalars().all())
 
 
 @router.post("", response_model=AccountRead, status_code=201)
-async def create_account(payload: AccountCreate, db: DbDep, _current_user: CurrentUser) -> Account:
+async def create_account(payload: AccountCreate, db: DbDep, _current_user: AdminUser) -> Account:
     account = Account(
         code=payload.code,
         name=payload.name,
@@ -43,7 +43,7 @@ async def create_account(payload: AccountCreate, db: DbDep, _current_user: Curre
 
 @router.get("/{id}/balance", response_model=BalanceResponse)
 async def get_account_balance(
-    id: uuid.UUID, as_of: datetime, db: DbDep, _current_user: CurrentUser
+    id: uuid.UUID, as_of: datetime, db: DbDep, _current_user: AuditorOrAdminUser
 ) -> BalanceResponse:
     balance = await calculate_balance(db, id, as_of)
     return BalanceResponse(balance=balance, as_of=as_of)
