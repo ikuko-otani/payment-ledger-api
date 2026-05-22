@@ -51,8 +51,11 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    # TODO ✍️: if current_user.role != UserRole.ADMIN: raise HTTPException(403, "Admin role required")
-    return current_user  # placeholder — remove after implementing
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
+        )
+    return current_user
 
 
 async def require_auditor_or_admin(
