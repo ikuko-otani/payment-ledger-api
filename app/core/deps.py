@@ -28,7 +28,9 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
         sub: str | None = payload.get("sub")
         if sub is None:
             raise credentials_exception
@@ -39,8 +41,8 @@ async def get_current_user(
     user = user_result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
-    # TODO ✍️: if not user.is_active: raise credentials_exception  (401, not 403)
-    return user
+    if not user.is_active:
+        raise credentials_exception  # not 403
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
