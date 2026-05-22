@@ -28,9 +28,7 @@ async def list_accounts(db: DbDep, _current_user: AuditorOrAdminUser) -> list[Ac
 
 
 @router.post("", response_model=AccountRead, status_code=201)
-async def create_account(
-    payload: AccountCreate, db: DbDep, _current_user: AdminUser
-) -> Account:
+async def create_account(payload: AccountCreate, db: DbDep, _current_user: AdminUser) -> Account:
     account = Account(
         code=payload.code,
         name=payload.name,
