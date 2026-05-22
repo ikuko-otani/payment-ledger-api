@@ -164,3 +164,41 @@ async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, No
         yield client
 
     fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def auditor_client(
+    engine: AsyncEngine,
+) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient with get_current_user overridden to return an AUDITOR-role user."""
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    async def override_get_current_user() -> User:
+        return User(
+            id=uuid.uuid4(),
+            email="auditor@example.com",
+            hashed_password="",
+            role=UserRole.AUDITOR,
+        )
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
+
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    fastapi_app.dependency_overrides.clear()
