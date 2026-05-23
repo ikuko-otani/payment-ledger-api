@@ -243,8 +243,19 @@ async def auditor_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     """Seed an auditor user into the test DB and yield a valid JWT access token."""
     email = "auditor@fixture.test"
     password = "AuditorTest123!"
-    # TODO: same pattern as admin_token but role=UserRole.AUDITOR
-    yield ""  # placeholder
+
+    await _seed_user(engine, email, password, UserRole.AUDITOR)
+
+    fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as tmp:
+        resp = await tmp.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+    token: str = resp.json()["access_token"]
+
+    yield token  # placeholder
     fastapi_app.dependency_overrides.clear()
 
 
