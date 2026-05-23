@@ -1,4 +1,4 @@
-"""Integration tests for JWT-protected endpoints (S3-4)."""
+"""Integration tests for JWT-protected endpoints (S3-4, S3-7)."""
 
 from __future__ import annotations
 
@@ -35,6 +35,28 @@ def _expired_token() -> str:
     return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
+# ---------------------------------------------------------------------------
+# S3-7: token-forgery helpers
+# ---------------------------------------------------------------------------
+
+
+def _invalid_signature_token() -> str:
+    """Return a JWT signed with the wrong secret key."""
+    # TODO: implement (hint: use jose_jwt.encode with "wrong-secret" instead of settings.secret_key)
+    ...
+
+
+def _nonexistent_user_token() -> str:
+    """Return a JWT with a random UUID sub that does not exist in the DB."""
+    # TODO: implement (hint: uuid4() sub + valid expiry + settings.secret_key)
+    ...
+
+
+# ---------------------------------------------------------------------------
+# Existing tests
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
 async def test_no_token_returns_401(unauthed_client: AsyncClient) -> None:
     """GET /accounts without Authorization header must return 401."""
@@ -60,3 +82,22 @@ async def test_expired_token_returns_401(unauthed_client: AsyncClient) -> None:
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# S3-7: edge-case tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_invalid_signature_token_returns_401(unauthed_client: AsyncClient) -> None:
+    """GET /accounts with a token signed by the wrong key must return 401."""
+    # TODO: implement
+    ...
+
+
+@pytest.mark.asyncio
+async def test_nonexistent_user_id_token_returns_401(unauthed_client: AsyncClient) -> None:
+    """GET /accounts with a valid-signature JWT whose sub is not in the DB must return 401."""
+    # TODO: implement
+    ...
