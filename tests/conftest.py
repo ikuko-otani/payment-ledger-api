@@ -41,9 +41,9 @@ def migrated_database_urls(
     """Run Alembic once and provide sync/async DB URLs."""
     raw_url = postgres_container.get_connection_url()
 
-    sync_url = raw_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1).replace(
-        "postgresql://", "postgresql+psycopg://", 1
-    )
+    sync_url = raw_url.replace(
+        "postgresql+psycopg2://", "postgresql+psycopg://", 1
+    ).replace("postgresql://", "postgresql+psycopg://", 1)
     async_url = sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
 
     cfg = AlembicConfig("alembic.ini")
@@ -69,12 +69,16 @@ async def engine(
 async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     """Clean tables before and after each test."""
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
+        await conn.execute(
+            text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE")
+        )
 
     yield
 
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
+        await conn.execute(
+            text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE")
+        )
 
 
 @pytest_asyncio.fixture()
@@ -180,10 +184,17 @@ async def _seed_user(
     role: UserRole,
 ) -> None:
     """Insert a User row directly into the test DB with a hashed password."""
-    # TODO: create session_factory from engine, open a session,
-    #       construct User(email, hashed_password=get_password_hash(password), role),
-    #       add + commit
-    ...
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with session_factory() as session:
+        user = User(
+            email=email,
+            hashed_password=get_password_hash(password),
+            role=role,
+        )
+        session.add(user)
+        await session.commit()
 
 
 def _make_db_override(
