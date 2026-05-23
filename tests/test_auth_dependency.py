@@ -12,7 +12,9 @@ async def _register_and_login(
     password: str = "secret123",
 ) -> str:
     """Register a user and return a valid JWT access token."""
-    await async_client.post("/api/v1/users", json={"email": email, "password": password})
+    await async_client.post(
+        "/api/v1/users", json={"email": email, "password": password}
+    )
     response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
@@ -42,14 +44,26 @@ def _expired_token() -> str:
 
 def _invalid_signature_token() -> str:
     """Return a JWT signed with the wrong secret key."""
-    # TODO: implement (hint: use jose_jwt.encode with "wrong-secret" instead of settings.secret_key)
-    ...
+    from uuid import uuid4
+    from jose import jwt as jose_jwt
+    from app.core.config import settings
+
+    payload = {"sub": str(uuid4())}
+    return jose_jwt.encode(payload, "wrong-secret", algorithm=settings.algorithm)
 
 
 def _nonexistent_user_token() -> str:
     """Return a JWT with a random UUID sub that does not exist in the DB."""
-    # TODO: implement (hint: uuid4() sub + valid expiry + settings.secret_key)
-    ...
+    from datetime import datetime, timedelta, timezone
+    from uuid import uuid4
+    from jose import jwt as jose_jwt
+    from app.core.config import settings
+
+    payload = {
+        "sub": str(uuid4()),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+    }
+    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
 # ---------------------------------------------------------------------------
@@ -90,14 +104,18 @@ async def test_expired_token_returns_401(unauthed_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_invalid_signature_token_returns_401(unauthed_client: AsyncClient) -> None:
+async def test_invalid_signature_token_returns_401(
+    unauthed_client: AsyncClient,
+) -> None:
     """GET /accounts with a token signed by the wrong key must return 401."""
     # TODO: implement
     ...
 
 
 @pytest.mark.asyncio
-async def test_nonexistent_user_id_token_returns_401(unauthed_client: AsyncClient) -> None:
+async def test_nonexistent_user_id_token_returns_401(
+    unauthed_client: AsyncClient,
+) -> None:
     """GET /accounts with a valid-signature JWT whose sub is not in the DB must return 401."""
     # TODO: implement
     ...
