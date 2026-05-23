@@ -76,7 +76,9 @@ async def test_auditor_can_get_account_balance(
     db_session: AsyncSession,
 ) -> None:
     """GET /accounts/{id}/balance as auditor must return 200."""
-    account_id = await _seed_account(db_session, "Balance-Auditor", AccountType.ASSET, "9001")
+    account_id = await _seed_account(
+        db_session, "Balance-Auditor", AccountType.ASSET, "9001"
+    )
     response = await auditor_client.get(
         f"/api/v1/accounts/{account_id}/balance",
         params={"as_of": "2024-01-01T00:00:00"},
@@ -90,7 +92,9 @@ async def test_admin_can_get_account_balance(
     db_session: AsyncSession,
 ) -> None:
     """GET /accounts/{id}/balance as admin must return 200."""
-    account_id = await _seed_account(db_session, "Balance-Auditor", AccountType.ASSET, "9001")
+    account_id = await _seed_account(
+        db_session, "Balance-Auditor", AccountType.ASSET, "9001"
+    )
     response = await async_client.get(
         f"/api/v1/accounts/{account_id}/balance",
         params={"as_of": "2024-01-01T00:00:00"},
@@ -125,7 +129,9 @@ async def test_admin_can_post_transaction(
 ) -> None:
     """POST /transactions as admin must return 201."""
     debit_id = await _seed_account(db_session, "Cash-RBAC", AccountType.ASSET, "9003")
-    credit_id = await _seed_account(db_session, "Revenue-RBAC", AccountType.REVENUE, "9004")
+    credit_id = await _seed_account(
+        db_session, "Revenue-RBAC", AccountType.REVENUE, "9004"
+    )
     payload = {
         "description": "RBAC test transaction",
         "transaction_date": "2024-01-01",
@@ -214,11 +220,31 @@ async def test_authenticated_admin_can_post_transaction(
     db_session: AsyncSession,
 ) -> None:
     """POST /transactions with a real JWT-authenticated admin must return 201."""
-    # TODO: seed debit + credit accounts via _seed_account,
-    #       admin_c = await authenticated_client("admin"),
-    #       build valid transaction payload,
-    #       POST to /api/v1/transactions, assert response.status_code == 201
-    ...
+    debit_id = await _seed_account(db_session, "Cash-Auth", AccountType.ASSET, "9010")
+    credit_id = await _seed_account(
+        db_session, "Revenue-Auth", AccountType.REVENUE, "9011"
+    )
+    payload = {
+        "description": "Authenticated admin transaction",
+        "transaction_date": "2024-01-01",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 500,
+                "currency": "JPY",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 500,
+                "currency": "JPY",
+            },
+        ],
+    }
+    admin_c = await authenticated_client("admin")
+    response = await admin_c.post("/api/v1/transactions", json=payload)
+    assert response.status_code == 201
 
 
 @pytest.mark.asyncio
@@ -226,6 +252,6 @@ async def test_authenticated_auditor_cannot_post_transaction(
     authenticated_client,
 ) -> None:
     """POST /transactions with a real JWT-authenticated auditor must return 403."""
-    # TODO: auditor_c = await authenticated_client("auditor"),
-    #       POST {} to /api/v1/transactions, assert response.status_code == 403
-    ...
+    auditor_c = await authenticated_client("auditor")
+    response = await auditor_c.post("/api/v1/transactions", json={})
+    assert response.status_code == 403
