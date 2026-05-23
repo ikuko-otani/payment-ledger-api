@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
+from contextlib import AsyncExitStack
 
 import pytest
 import pytest_asyncio
@@ -20,6 +21,7 @@ from testcontainers.postgres import PostgresContainer
 
 from alembic import command as alembic_command
 from app.core.deps import get_current_user
+from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.main import app as fastapi_app
 from app.models.user import User, UserRole
@@ -166,16 +168,34 @@ async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, No
     fastapi_app.dependency_overrides.clear()
 
 
-@pytest_asyncio.fixture()
-async def auditor_client(
+# ---------------------------------------------------------------------------
+# S3-6: Token-based authenticated client fixtures
+# ---------------------------------------------------------------------------
+
+
+async def _seed_user(
     engine: AsyncEngine,
-) -> AsyncGenerator[AsyncClient, None]:
-    """AsyncClient with get_current_user overridden to return an AUDITOR-role user."""
-    session_factory = async_sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
+    email: str,
+    password: str,
+    role: UserRole,
+) -> None:
+    """Insert a User row directly into the test DB with a hashed password."""
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        user = User(
+            email=email,
+            hashed_password=get_password_hash(password),
+            role=role,
+        )
+        session.add(user)
+        await session.commit()
+
+
+def _make_db_override(
+    engine: AsyncEngine,
+) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
+    """Return an override_get_db callable suitable for dependency_overrides[get_db]."""
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as session:
@@ -186,19 +206,109 @@ async def auditor_client(
                 await session.rollback()
                 raise
 
-    async def override_get_current_user() -> User:
-        return User(
-            id=uuid.uuid4(),
-            email="auditor@example.com",
-            hashed_password="",
-            role=UserRole.AUDITOR,
+    return override_get_db
+
+
+@pytest_asyncio.fixture()
+async def admin_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
+    """Seed an admin user into the test DB and yield a valid JWT access token."""
+    email = "admin@fixture.test"
+    password = "AdminTest123!"
+
+    await _seed_user(engine, email, password, UserRole.ADMIN)
+
+    fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as tmp:
+        resp = await tmp.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
         )
+    token: str = resp.json()["access_token"]
 
-    fastapi_app.dependency_overrides[get_db] = override_get_db
-    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
+    yield token
+    fastapi_app.dependency_overrides.clear()
 
+
+@pytest_asyncio.fixture()
+async def auditor_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
+    """Seed an auditor user into the test DB and yield a valid JWT access token."""
+    email = "auditor@fixture.test"
+    password = "AuditorTest123!"
+
+    await _seed_user(engine, email, password, UserRole.AUDITOR)
+
+    fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as tmp:
+        resp = await tmp.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+    token: str = resp.json()["access_token"]
+
+    yield token  # placeholder
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def authenticated_client(
+    engine: AsyncEngine,
+) -> AsyncGenerator[Callable[[str], AsyncClient], None]:
+    """Factory fixture: yields a coroutine factory that creates authenticated AsyncClients.
+
+    Usage in tests::
+
+        async def test_foo(authenticated_client):
+            client = await authenticated_client("admin")
+            resp = await client.post("/api/v1/transactions", ...)
+    """
+    stack = AsyncExitStack()
+
+    async def _factory(role: str) -> AsyncClient:
+        email = f"{role}@fixture.test"
+        password = f"{role.capitalize()}Test123!"
+        role_enum = UserRole.ADMIN if role == "admin" else UserRole.AUDITOR
+
+        await _seed_user(engine, email, password, role_enum)
+
+        fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+        transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+        client = await stack.enter_async_context(
+            AsyncClient(transport=transport, base_url="http://test")
+        )
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+        token: str = resp.json()["access_token"]
+        client.headers.update({"Authorization": f"Bearer {token}"})
+        return client
+
+    yield _factory  # type: ignore[misc]
+    await stack.aclose()
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def auditor_client(
+    engine: AsyncEngine,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Token-based AsyncClient with AUDITOR role (replaces the override-based version)."""
+    email = "auditor@fixture.test"
+    password = "AuditorTest123!"
+
+    await _seed_user(engine, email, password, UserRole.AUDITOR)
+
+    fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
     transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+        token: str = resp.json()["access_token"]
+        client.headers.update({"Authorization": f"Bearer {token}"})
         yield client
 
     fastapi_app.dependency_overrides.clear()
