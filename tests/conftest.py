@@ -201,9 +201,19 @@ def _make_db_override(
     engine: AsyncEngine,
 ) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
     """Return an override_get_db callable suitable for dependency_overrides[get_db]."""
-    # TODO: create session_factory, define async def override_get_db() that yields
-    #       a fresh session with commit/rollback handling, return it
-    ...  # type: ignore[return-value]
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+    return override_get_db
 
 
 @pytest_asyncio.fixture()
