@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
+from contextlib import AsyncExitStack
 
 import pytest
 import pytest_asyncio
@@ -20,6 +21,7 @@ from testcontainers.postgres import PostgresContainer
 
 from alembic import command as alembic_command
 from app.core.deps import get_current_user
+from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.main import app as fastapi_app
 from app.models.user import User, UserRole
@@ -163,6 +165,85 @@ async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, No
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
+    fastapi_app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# S3-6: Token-based authenticated client fixtures
+# ---------------------------------------------------------------------------
+
+
+async def _seed_user(
+    engine: AsyncEngine,
+    email: str,
+    password: str,
+    role: UserRole,
+) -> None:
+    """Insert a User row directly into the test DB with a hashed password."""
+    # TODO: create session_factory from engine, open a session,
+    #       construct User(email, hashed_password=get_password_hash(password), role),
+    #       add + commit
+    ...
+
+
+def _make_db_override(
+    engine: AsyncEngine,
+) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
+    """Return an override_get_db callable suitable for dependency_overrides[get_db]."""
+    # TODO: create session_factory, define async def override_get_db() that yields
+    #       a fresh session with commit/rollback handling, return it
+    ...  # type: ignore[return-value]
+
+
+@pytest_asyncio.fixture()
+async def admin_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
+    """Seed an admin user into the test DB and yield a valid JWT access token."""
+    email = "admin@fixture.test"
+    password = "AdminTest123!"
+    # TODO: call _seed_user(engine, email, password, UserRole.ADMIN)
+    #       set fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+    #       open AsyncClient with ASGITransport, POST /api/v1/auth/login,
+    #       extract "access_token" from response JSON
+    yield ""  # placeholder — replace with actual token
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def auditor_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
+    """Seed an auditor user into the test DB and yield a valid JWT access token."""
+    email = "auditor@fixture.test"
+    password = "AuditorTest123!"
+    # TODO: same pattern as admin_token but role=UserRole.AUDITOR
+    yield ""  # placeholder
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def authenticated_client(
+    engine: AsyncEngine,
+) -> AsyncGenerator[Callable[[str], AsyncClient], None]:
+    """Factory fixture: yields a coroutine factory that creates authenticated AsyncClients.
+
+    Usage in tests::
+
+        async def test_foo(authenticated_client):
+            client = await authenticated_client("admin")
+            resp = await client.post("/api/v1/transactions", ...)
+    """
+    stack = AsyncExitStack()
+
+    async def _factory(role: str) -> AsyncClient:
+        # TODO: derive email/password from role (e.g. "admin@fixture.test"),
+        #       derive role_enum (UserRole.ADMIN or UserRole.AUDITOR),
+        #       call _seed_user, set dependency_overrides[get_db] via _make_db_override,
+        #       enter AsyncClient via stack (stack.enter_async_context),
+        #       POST /api/v1/auth/login to get token,
+        #       set client.headers["Authorization"] = f"Bearer {token}",
+        #       return client
+        ...  # type: ignore[return-value]
+
+    yield _factory  # type: ignore[misc]
+    await stack.aclose()
     fastapi_app.dependency_overrides.clear()
 
 

@@ -201,3 +201,31 @@ async def test_unauthenticated_request_returns_401(
     """Request with no Authorization header must return 401."""
     response = await unauthed_client.get("/api/v1/accounts")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# S3-6: authenticated_client factory — DONE condition tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_authenticated_admin_can_post_transaction(
+    authenticated_client,
+    db_session: AsyncSession,
+) -> None:
+    """POST /transactions with a real JWT-authenticated admin must return 201."""
+    # TODO: seed debit + credit accounts via _seed_account,
+    #       admin_c = await authenticated_client("admin"),
+    #       build valid transaction payload,
+    #       POST to /api/v1/transactions, assert response.status_code == 201
+    ...
+
+
+@pytest.mark.asyncio
+async def test_authenticated_auditor_cannot_post_transaction(
+    authenticated_client,
+) -> None:
+    """POST /transactions with a real JWT-authenticated auditor must return 403."""
+    # TODO: auditor_c = await authenticated_client("auditor"),
+    #       POST {} to /api/v1/transactions, assert response.status_code == 403
+    ...
