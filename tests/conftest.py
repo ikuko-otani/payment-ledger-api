@@ -274,14 +274,24 @@ async def authenticated_client(
     stack = AsyncExitStack()
 
     async def _factory(role: str) -> AsyncClient:
-        # TODO: derive email/password from role (e.g. "admin@fixture.test"),
-        #       derive role_enum (UserRole.ADMIN or UserRole.AUDITOR),
-        #       call _seed_user, set dependency_overrides[get_db] via _make_db_override,
-        #       enter AsyncClient via stack (stack.enter_async_context),
-        #       POST /api/v1/auth/login to get token,
-        #       set client.headers["Authorization"] = f"Bearer {token}",
-        #       return client
-        ...  # type: ignore[return-value]
+        email = f"{role}@fixture.test"
+        password = f"{role.capitalize()}Test123!"
+        role_enum = UserRole.ADMIN if role == "admin" else UserRole.AUDITOR
+
+        await _seed_user(engine, email, password, role_enum)
+
+        fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+        transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+        client = await stack.enter_async_context(
+            AsyncClient(transport=transport, base_url="http://test")
+        )
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+        token: str = resp.json()["access_token"]
+        client.headers.update({"Authorization": f"Bearer {token}"})
+        return client
 
     yield _factory  # type: ignore[misc]
     await stack.aclose()
