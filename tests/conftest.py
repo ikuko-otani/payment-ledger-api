@@ -213,6 +213,7 @@ def _make_db_override(
             except Exception:
                 await session.rollback()
                 raise
+
     return override_get_db
 
 
@@ -221,11 +222,19 @@ async def admin_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     """Seed an admin user into the test DB and yield a valid JWT access token."""
     email = "admin@fixture.test"
     password = "AdminTest123!"
-    # TODO: call _seed_user(engine, email, password, UserRole.ADMIN)
-    #       set fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
-    #       open AsyncClient with ASGITransport, POST /api/v1/auth/login,
-    #       extract "access_token" from response JSON
-    yield ""  # placeholder — replace with actual token
+
+    await _seed_user(engine, email, password, UserRole.ADMIN)
+
+    fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as tmp:
+        resp = await tmp.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+    token: str = resp.json()["access_token"]
+
+    yield token
     fastapi_app.dependency_overrides.clear()
 
 
