@@ -151,6 +151,31 @@ docker compose up          # PostgreSQL + API on :8000
 
 ---
 
+## 7. Authentication & Authorization Design
+
+> Added in S3 after implementing JWT-based auth, RBAC role enforcement, and
+> the `get_current_user` dependency. These decisions explain **what was chosen
+> and what was deliberately rejected**, so they can serve as interview answers
+> without modification.
+
+### 7.1 Why JWT over server-side sessions
+
+<!-- TODO: explain statelessness, horizontal scaling, trade-offs -->
+
+### 7.2 Why RBAC over ABAC
+
+<!-- TODO: explain 2-role model, why ABAC is overkill for MVP scope -->
+
+### 7.3 Why native PostgreSQL enum for the `role` column
+
+<!-- TODO: explain type safety, SQLAlchemy mapping, migration cost trade-off -->
+
+### 7.4 Why uniform error messages for auth failures
+
+<!-- TODO: explain information-leak prevention, 401 vs 403 distinction -->
+
+---
+
 ## 6. What I Would Add in Production
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out
