@@ -108,8 +108,11 @@ async def test_invalid_signature_token_returns_401(
     unauthed_client: AsyncClient,
 ) -> None:
     """GET /accounts with a token signed by the wrong key must return 401."""
-    # TODO: implement
-    ...
+    token = _invalid_signature_token()
+    response = await unauthed_client.get(
+        "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -118,4 +121,8 @@ async def test_nonexistent_user_id_token_returns_401(
 ) -> None:
     """GET /accounts with a valid-signature JWT whose sub is not in the DB must return 401."""
     # TODO: implement
-    ...
+    token = _nonexistent_user_token()
+    response = await unauthed_client.get(
+        "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 401
