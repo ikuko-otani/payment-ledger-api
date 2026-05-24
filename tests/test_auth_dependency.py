@@ -12,9 +12,7 @@ async def _register_and_login(
     password: str = "secret123",
 ) -> str:
     """Register a user and return a valid JWT access token."""
-    await async_client.post(
-        "/api/v1/users", json={"email": email, "password": password}
-    )
+    await async_client.post("/api/v1/users", json={"email": email, "password": password})
     response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
@@ -45,7 +43,9 @@ def _expired_token() -> str:
 def _invalid_signature_token() -> str:
     """Return a JWT signed with the wrong secret key."""
     from uuid import uuid4
+
     from jose import jwt as jose_jwt
+
     from app.core.config import settings
 
     payload = {"sub": str(uuid4())}
@@ -56,7 +56,9 @@ def _nonexistent_user_token() -> str:
     """Return a JWT with a random UUID sub that does not exist in the DB."""
     from datetime import datetime, timedelta, timezone
     from uuid import uuid4
+
     from jose import jwt as jose_jwt
+
     from app.core.config import settings
 
     payload = {
@@ -120,7 +122,6 @@ async def test_nonexistent_user_id_token_returns_401(
     unauthed_client: AsyncClient,
 ) -> None:
     """GET /accounts with a valid-signature JWT whose sub is not in the DB must return 401."""
-    # TODO: implement
     token = _nonexistent_user_token()
     response = await unauthed_client.get(
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
