@@ -160,19 +160,115 @@ docker compose up          # PostgreSQL + API on :8000
 
 ### 7.1 Why JWT over server-side sessions
 
-<!-- TODO: explain statelessness, horizontal scaling, trade-offs -->
+**Decision**: Issue a signed JWT (HS256) on successful login. Every subsequent
+request carries the token in the `Authorization: Bearer <token>` header; the
+server validates the signature and extracts the payload without touching the
+database or a session store.
+
+**What was rejected**: HTTP sessions backed by a server-side store (Redis,
+PostgreSQL). In that model the server keeps a session table, looks up every
+request by session ID, and must propagate session state across all API
+instances.
+
+**Rationale**:
+- *Statelessness*: any API pod can validate a JWT independently; no shared
+  session store is required. This makes horizontal scaling (adding pods behind
+  a load balancer) a configuration change rather than an architectural one.
+- *Simplicity*: for a single-service MVP with two roles and no logout
+  requirement, the extra operational cost of a session store (cache warm-up,
+  TTL management, failover) adds complexity with no benefit.
+- *Industry convention*: REST + JWT is the dominant pattern for service-to-
+  service and mobile clients; it matches what payment-processing teams
+  (Stripe, Mollie) expect to review.
+
+**Trade-off — what JWT gives up**:
+- *Instant revocation* is hard. A valid token stays valid until expiry even
+  after a user is disabled. Mitigation options include: short-lived tokens
+  (15 min), a token blocklist in Redis, or opaque reference tokens. These
+  are deferred to a post-MVP hardening sprint.
+- *Payload size*: every request carries the full token. For APIs with very
+  large claims sets, this adds per-request overhead vs. a session ID cookie.
 
 ### 7.2 Why RBAC over ABAC
 
-<!-- TODO: explain 2-role model, why ABAC is overkill for MVP scope -->
+**Decision**: Implement Role-Based Access Control with two roles: `admin`
+(full read/write) and `auditor` (read-only). The role is stored on the
+`users` table and checked in the FastAPI dependency layer.
+
+**What was rejected**: Attribute-Based Access Control (ABAC), which evaluates
+a policy against a combination of user attributes, resource attributes, and
+environment context (e.g. "user from department=Finance may read transactions
+where currency=EUR during business hours").
+
+**Rationale**:
+- *Scope fit*: the current business requirement is exactly two roles with a
+  clear write/read split. RBAC expresses this in a single enum column; ABAC
+  would require a policy engine (Open Policy Agent, Casbin) and a schema for
+  attribute propagation — significant complexity for zero extra capability.
+- *Auditability*: "what can this user do?" is answered by reading one column.
+  With ABAC the answer depends on the full policy set and the resource being
+  accessed, which is harder to audit.
+- *Evolution path*: if a third role emerges (e.g. `reconciler` with narrow
+  write access), adding an enum value and a new dependency check is a one-day
+  change. If the access model grows to dozens of fine-grained rules, migrating
+  to ABAC at that point is still possible without rewriting the existing RBAC
+  checks.
 
 ### 7.3 Why native PostgreSQL enum for the `role` column
 
-<!-- TODO: explain type safety, SQLAlchemy mapping, migration cost trade-off -->
+**Decision**: Define `role` as a PostgreSQL native `ENUM` type (`CREATE TYPE
+user_role AS ENUM ('admin', 'auditor')`), mapped to a Python `enum.Enum`
+via SQLAlchemy's `Enum(UserRole, native_enum=True)`.
+
+**What was rejected**:
+- *VARCHAR with CHECK constraint*: allows arbitrary strings to be inserted
+  before the constraint fires; no type-level guarantee at the ORM layer.
+- *Application-level enum only (native_enum=False)*: stores the value as
+  VARCHAR in PostgreSQL, losing the DB-side type guarantee and the ability
+  to introspect valid values from the schema.
+
+**Rationale**:
+- *Type safety at two layers*: PostgreSQL rejects any value not in the enum
+  at write time; SQLAlchemy raises a validation error before the query even
+  reaches the DB. Defense in depth.
+- *Schema clarity*: `\d users` in psql shows `user_role` as the column type,
+  making the valid role set discoverable without reading application code.
+- *Consistency with direction/type columns*: `entries.direction` and
+  `accounts.type` already use the same pattern in this codebase.
+
+**Trade-off**:
+- Adding a new role requires `ALTER TYPE user_role ADD VALUE 'reconciler'`
+  in an Alembic migration *plus* a new enum member in Python. The two must be
+  deployed together. This coupling is acceptable at two roles; with 10+ roles
+  a VARCHAR approach avoids migration churn.
 
 ### 7.4 Why uniform error messages for auth failures
 
-<!-- TODO: explain information-leak prevention, 401 vs 403 distinction -->
+**Decision**: All authentication and authorization failures return a generic
+`401 Unauthorized` or `403 Forbidden` with a fixed message
+(`"Not authenticated"` / `"Not enough permissions"`). The response body does
+not reveal whether the token was missing, expired, malformed, or signed with
+the wrong secret, nor whether the user ID exists in the database.
+
+**What was rejected**: Specific error messages such as `"Token expired"`,
+`"User not found"`, or `"Invalid signature"`. These messages are common in
+tutorials and developer-friendly APIs but leak information useful to
+attackers.
+
+**Rationale**:
+- *User enumeration prevention*: if the API returned `"User not found"` for
+  a valid token referencing a non-existent UUID, an attacker could brute-force
+  UUIDs to determine which users exist. A uniform `401` closes this channel.
+- *Token structure disclosure*: distinguishing `"expired"` from `"invalid
+  signature"` tells an attacker whether a forged token passed structural
+  validation — useful feedback for crafting further attacks.
+- *OWASP API Security Top 10*: uniform errors directly address API2
+  (Broken Authentication) and API3 (Excessive Data Exposure).
+
+**Trade-off**:
+- *Developer experience*: during development a `401` with no context is
+  frustrating. Mitigation: detailed error codes in server-side structured
+  logs (structlog) visible to operators but not returned to clients.
 
 ---
 
