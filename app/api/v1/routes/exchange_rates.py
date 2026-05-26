@@ -28,9 +28,7 @@ async def list_exchange_rates(
     to_currency_id: uuid.UUID | None = None,
     effective_date: date | None = None,
 ) -> list[ExchangeRate]:
-    return await get_exchange_rates(
-        db, from_currency_id, to_currency_id, effective_date
-    )
+    return await get_exchange_rates(db, from_currency_id, to_currency_id, effective_date)
 
 
 @router.post("", response_model=ExchangeRateRead, status_code=201)
