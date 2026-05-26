@@ -16,7 +16,6 @@ Items are added when a task is completed and something is intentionally left out
 | TD-009 | S2-3 | housekeeping | Root `/main.py` is a leftover from `uv init` (contains only `print("Hello from payment-ledger-api!")`). Dockerfile and conftest both reference `app/main.py`; the root file is unreferenced and safe to delete. Risk: new contributors may mistake it for the real entry point. | Low | S2-3 |
 | TD-010 | S2-3 | housekeeping | `.gitignore` is sparse: `.pytest_cache/` was committed (exclusion missed); `.idea/` / `.vscode/` IDE directories are not excluded; general Python project patterns are incomplete. `.claude/` and `flagship-goal-prompt-template.md` were added today. Full cleanup recommended before portfolio publication. | Low | S2-3 |
 | TD-011 | S2-X-2 | validation | `create_transaction` checks account existence but not `is_active` status. Posting to a deactivated account is currently allowed. Add `is_active=True` filter to the account existence query. | Medium | S2-X-2 |
-| TD-012 | S2-X-2 | architecture | No currency scale management. `entries.amount` is stored as BIGINT minor units but the scale (decimal places) per currency is not tracked. Clients must know ISO 4217 scales externally. Options: (A) hardcoded `CURRENCY_SCALES` dict, (B) `currencies` master table, (C) client responsibility. Decide before multi-currency support is expanded. | Medium | S2-X-2 |
 | TD-013 | S3-7 | testing | coverage.py under-reports async function coverage. Lines after `await` in async functions (e.g. `deps.py` L39–44) are not recorded because `sys.settrace` trace hooks are not re-registered when a coroutine resumes after suspension. Actual execution is confirmed by test assertions (tests PASS with the expected status code). Fix: add `[tool.coverage.run] concurrency = ["asyncio", "thread"]` to `pyproject.toml`, or set `COVERAGE_CORE=sysmon` (Python 3.12 `sys.monitoring`). Address before the S6 coverage 85%+ target is evaluated. | Low | S3-7 |
 
 ## Resolved
@@ -25,6 +24,7 @@ Items are added when a task is completed and something is intentionally left out
 |----|-------------|-------------|
 | TD-001 | `test_get_transactions_returns_list_shape` and `test_post_then_get_shows_persisted_record` were failing — `override_get_db` in conftest did not commit the session, unlike production `get_db`. Fixed by mirroring the try/commit/except/rollback pattern. | S2-4 |
 | TD-002 | No authentication on any endpoint. All routes were open. | S3-4 |
+| TD-012 | No currency scale management. Added `decimal_places` column to `Currency` model (JPY=0, EUR=2, USD=2). | S4-1 |
 
 ---
 
