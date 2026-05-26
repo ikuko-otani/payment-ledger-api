@@ -20,7 +20,6 @@ router = APIRouter(prefix="/exchange-rates", tags=["exchange-rates"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
-# ✍️ return await get_exchange_rates(db, from_currency_id, to_currency_id, effective_date)
 @router.get("", response_model=list[ExchangeRateRead])
 async def list_exchange_rates(
     db: DbDep,
@@ -34,7 +33,6 @@ async def list_exchange_rates(
     )
 
 
-# ✍️ return await create_exchange_rate(db, payload, current_user)
 @router.post("", response_model=ExchangeRateRead, status_code=201)
 async def post_exchange_rate(
     payload: ExchangeRateCreate,
