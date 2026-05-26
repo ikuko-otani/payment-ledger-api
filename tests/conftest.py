@@ -69,12 +69,22 @@ async def engine(
 async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     """Clean tables before and after each test."""
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
+        await conn.execute(
+            text(
+                "TRUNCATE TABLE exchange_rates, entries, "
+                "transactions, accounts, users, currencies CASCADE"
+            )
+        )
 
     yield
 
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE entries, transactions, accounts, users CASCADE"))
+        await conn.execute(
+            text(
+                "TRUNCATE TABLE exchange_rates, entries, "
+                "transactions, accounts, users, currencies CASCADE"
+            )
+        )
 
 
 @pytest_asyncio.fixture()
