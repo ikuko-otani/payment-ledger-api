@@ -18,12 +18,21 @@ from app.schemas.currency import CurrencyCreate, ExchangeRateCreate
 
 # ✍️ SELECT all rows from currencies and return as list
 async def get_currencies(db: AsyncSession) -> list[Currency]:
-    pass
+    result = await db.execute(select(Currency))
+    return list(result.scalars().all())
 
 
 # ✍️ INSERT a new Currency row from payload, flush + refresh, return it
 async def create_currency(db: AsyncSession, payload: CurrencyCreate) -> Currency:
-    pass
+    currency = Currency(
+        code=payload.code,
+        name=payload.name,
+        decimal_places=payload.decimal_places,
+    )
+    db.add(currency)
+    await db.flush()
+    await db.refresh(currency)
+    return currency
 
 
 # ✍️ SELECT exchange_rates with optional filters:
