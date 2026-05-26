@@ -16,13 +16,12 @@ from app.models.user import User
 from app.schemas.currency import CurrencyCreate, ExchangeRateCreate
 
 
-# ✍️ SELECT all rows from currencies and return as list
+# SELECT all rows from currencies and return as list
 async def get_currencies(db: AsyncSession) -> list[Currency]:
     result = await db.execute(select(Currency))
     return list(result.scalars().all())
 
 
-# ✍️ INSERT a new Currency row from payload, flush + refresh, return it
 async def create_currency(db: AsyncSession, payload: CurrencyCreate) -> Currency:
     currency = Currency(
         code=payload.code,
@@ -35,22 +34,42 @@ async def create_currency(db: AsyncSession, payload: CurrencyCreate) -> Currency
     return currency
 
 
-# ✍️ SELECT exchange_rates with optional filters:
-#    from_currency_id, to_currency_id, effective_date (each applied only if not None)
 async def get_exchange_rates(
     db: AsyncSession,
     from_currency_id: uuid.UUID | None = None,
     to_currency_id: uuid.UUID | None = None,
     effective_date: date | None = None,
 ) -> list[ExchangeRate]:
-    pass
+    stmt = select(ExchangeRate)
+    if from_currency_id is not None:
+        stmt = stmt.where(ExchangeRate.from_currency_id == from_currency_id)
+    if to_currency_id is not None:
+        stmt = stmt.where(ExchangeRate.to_currency_id == to_currency_id)
+    if effective_date is not None:
+        stmt = stmt.where(ExchangeRate.effective_date == effective_date)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-# ✍️ INSERT a new ExchangeRate row (set created_by_id = created_by.id),
-#    catch IntegrityError → raise HTTPException(409)
 async def create_exchange_rate(
     db: AsyncSession,
     payload: ExchangeRateCreate,
     created_by: User,
 ) -> ExchangeRate:
-    pass
+    exchange_rate = ExchangeRate(
+        from_currency_id=payload.from_currency_id,
+        to_currency_id=payload.to_currency_id,
+        rate=payload.rate,
+        effective_date=payload.effective_date,
+        created_by_id=created_by.id,
+    )
+    db.add(exchange_rate)
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Exchange rate for this currency pair and date already exists",
+        )
+    await db.refresh(exchange_rate)
+    return exchange_rate
