@@ -29,7 +29,9 @@ async def list_exchange_rates(
     to_currency_id: uuid.UUID | None = None,
     effective_date: date | None = None,
 ) -> list[ExchangeRate]:
-    pass
+    return await get_exchange_rates(
+        db, from_currency_id, to_currency_id, effective_date
+    )
 
 
 # ✍️ return await create_exchange_rate(db, payload, current_user)
@@ -39,4 +41,4 @@ async def post_exchange_rate(
     db: DbDep,
     current_user: AdminUser,
 ) -> ExchangeRate:
-    pass
+    return await create_exchange_rate(db, payload, current_user)
