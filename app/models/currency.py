@@ -17,11 +17,6 @@ class Currency(Base):
     __tablename__ = "currencies"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    # ✍️ code
-    # ✍️ name
-    # ✍️ decimal_places
-    # ✍️ is_active
-    # ✍️ created_at
     code: Mapped[str] = mapped_column(String(3), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     decimal_places: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -33,4 +28,4 @@ class Currency(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Currency id={self.id}>"
+        return f"<Currency id={self.id} code={self.code!r}>"
