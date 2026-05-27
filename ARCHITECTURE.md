@@ -272,6 +272,31 @@ attackers.
 
 ---
 
+---
+
+## 8. Multi-Currency Design (S4)
+
+### ADR-006 — Rounding policy: ROUND_HALF_UP for currency conversion
+
+> ✍️ TODO: fill in during Step C — see CLAUDE.md 8.5 for format
+>
+> Points to cover:
+> - Decision: ROUND_HALF_UP (not ROUND_HALF_EVEN / "banker's rounding")
+> - Why: ISO 20022 / customer-facing fintech convention; deterministic per transaction
+> - Trade-off vs ROUND_HALF_EVEN; when ROUND_HALF_EVEN would be preferred
+> - Python implementation: `Decimal.quantize(Decimal("1"), rounding=ROUND_HALF_UP)`
+
+### ADR-007 — Hub-and-Spoke base currency (USD)
+
+> ✍️ TODO: fill in during Step C
+>
+> Points to cover:
+> - Decision: single base currency (USD); all entries store converted_amount_usd
+> - Why: N rates instead of N*(N-1)/2 pairs
+> - Trade-off: two-hop rounding loss (JPY→USD→EUR via reporting); point-in-time snapshot
+
+---
+
 ## 6. What I Would Add in Production
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out
