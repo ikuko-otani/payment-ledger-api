@@ -42,8 +42,6 @@ async def _get_converted_amount_usd(
     - Otherwise: looks up ExchangeRate(from=currency_code, to=USD, date=transaction_date)
       and applies ROUND_HALF_UP rounding.
     - Raises HTTP 422 if no matching ExchangeRate row exists.
-
-    ✍️ TODO: implement — see Step C for full implementation
     """
     if currency_code == BASE_CURRENCY:
         return amount
@@ -159,8 +157,13 @@ async def create_transaction(
 
     # ------------------------------------------------------------------
     # Convert each entry amount to USD cents at write time
-    # ✍️ TODO: call _get_converted_amount_usd for each entry — see Step C
     # ------------------------------------------------------------------
+    converted_amounts = [
+        await _get_converted_amount_usd(
+            db, entry.amount, payload.currency_code, payload.currency_code
+        )
+        for entry in payload.entries
+    ]
 
     entries = [
         Entry(
@@ -169,9 +172,9 @@ async def create_transaction(
             direction=entry.direction,
             amount=entry.amount,
             currency=entry.currency,
-            converted_amount_usd=0,  # ✍️ TODO: replace with conversion result
+            converted_amount_usd=converted_amount,  # ✍️ TODO: replace with conversion result
         )
-        for entry in payload.entries
+        for entry, converted_amount in zip(payload.entries, converted_amounts)
     ]
     db.add_all(entries)
     await db.flush()
