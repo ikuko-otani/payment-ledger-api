@@ -45,7 +45,51 @@ async def _get_converted_amount_usd(
 
     ✍️ TODO: implement — see Step C for full implementation
     """
-    ...
+    if currency_code == BASE_CURRENCY:
+        return amount
+
+    # Resolve from_currency UUID
+    from_result = await db.execute(
+        select(Currency).where(Currency.code == currency_code)
+    )
+    from_currency = from_result.scalar_one_or_none()
+    if from_currency is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown currency code: {currency_code!r}",
+        )
+
+    # Resolve to_currency (USD) UUID
+    to_result = await db.execute(select(Currency).where(Currency.code == BASE_CURRENCY))
+    to_currency = to_result.scalar_one_or_none()
+    if to_currency is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Base currency {BASE_CURRENCY!r} not found in currencies table",
+        )
+
+    # Look up ExchangeRate for (from, to, date)
+    rate_result = await db.execute(
+        select(ExchangeRate).where(
+            ExchangeRate.from_currency_id == from_currency.id,
+            ExchangeRate.to_currency_id == to_currency.id,
+            ExchangeRate.effective_date == transaction_date,
+        )
+    )
+    exchange_rate = rate_result.scalar_one_or_none()
+    if exchange_rate is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"No exchange rate found for {currency_code}→{BASE_CURRENCY}"
+                f" on {transaction_date}"
+            ),
+        )
+
+    converted = (Decimal(amount) * exchange_rate.rate).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    return int(converted)
 
 
 async def create_transaction(
@@ -91,7 +135,9 @@ async def create_transaction(
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
-    credit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.CREDIT)
+    credit_sum = sum(
+        e.amount for e in payload.entries if e.direction == Direction.CREDIT
+    )
 
     if debit_sum != credit_sum:
         raise HTTPException(
