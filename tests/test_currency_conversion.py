@@ -301,8 +301,39 @@ async def test_missing_exchange_rate_returns_422(
     db_session: AsyncSession,
 ) -> None:
     """422 when no ExchangeRate row exists for (currency_code, USD, transaction_date)."""
-    # ✍️ TODO: implement — do NOT seed exchange rate; expect 422
-    ...
+    client = await authenticated_client("admin")
+    # Seed currencies but NO exchange rate
+    await _seed_currency(client, "JPY", "Japanese Yen", 0)
+    await _seed_currency(client, "USD", "US Dollar", 2)
+
+    debit_id = await _seed_account(
+        db_session, "Cash-NoRate", AccountType.ASSET, "CV-1030"
+    )
+    credit_id = await _seed_account(
+        db_session, "Rev-NoRate", AccountType.REVENUE, "CV-4030"
+    )
+
+    payload = {
+        "currency_code": "JPY",
+        "description": "No rate available",
+        "transaction_date": "2024-03-01",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 1000,
+                "currency": "JPY",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 1000,
+                "currency": "JPY",
+            },
+        ],
+    }
+    resp = await client.post("/api/v1/transactions", json=payload)
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -311,8 +342,40 @@ async def test_exchange_rate_wrong_date_returns_422(
     db_session: AsyncSession,
 ) -> None:
     """422 when ExchangeRate exists for a DIFFERENT date than transaction_date."""
-    # ✍️ TODO: implement — seed rate for 2024-01-01 but POST with 2024-06-01
-    ...
+    client = await authenticated_client("admin")
+    jpy_id = await _seed_currency(client, "JPY", "Japanese Yen", 0)
+    usd_id = await _seed_currency(client, "USD", "US Dollar", 2)
+    # Seed rate for 2024-01-01 only
+    await _seed_exchange_rate(client, jpy_id, usd_id, "0.00670000", "2024-01-01")
+
+    debit_id = await _seed_account(
+        db_session, "Cash-WDate", AccountType.ASSET, "CV-1040"
+    )
+    credit_id = await _seed_account(
+        db_session, "Rev-WDate", AccountType.REVENUE, "CV-4040"
+    )
+
+    payload = {
+        "currency_code": "JPY",
+        "description": "Wrong date",
+        "transaction_date": "2024-06-01",  # No rate for this date
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 1000,
+                "currency": "JPY",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 1000,
+                "currency": "JPY",
+            },
+        ],
+    }
+    resp = await client.post("/api/v1/transactions", json=payload)
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -321,5 +384,32 @@ async def test_unknown_currency_code_returns_422(
     db_session: AsyncSession,
 ) -> None:
     """422 when currency_code is not present in the currencies table."""
-    # ✍️ TODO: implement — use currency_code="XXX" (no Currency row)
-    ...
+    client = await authenticated_client("admin")
+    # Do NOT seed "XXX" currency
+
+    debit_id = await _seed_account(db_session, "Cash-Unk", AccountType.ASSET, "CV-1050")
+    credit_id = await _seed_account(
+        db_session, "Rev-Unk", AccountType.REVENUE, "CV-4050"
+    )
+
+    payload = {
+        "currency_code": "XXX",
+        "description": "Unknown currency",
+        "transaction_date": "2024-01-15",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 1000,
+                "currency": "XXX",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 1000,
+                "currency": "XXX",
+            },
+        ],
+    }
+    resp = await client.post("/api/v1/transactions", json=payload)
+    assert resp.status_code == 422
