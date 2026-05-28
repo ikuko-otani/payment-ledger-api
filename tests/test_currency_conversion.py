@@ -207,8 +207,43 @@ async def test_converted_amount_usd_rounds_half_up(
     db_session: AsyncSession,
 ) -> None:
     """Rounding: 0.5 fractional cent rounds UP (ROUND_HALF_UP, not banker's rounding)."""
-    # ✍️ TODO: implement — choose an amount and rate that produce a .5 fractional result
-    ...
+    client = await authenticated_client("admin")
+    jpy_id = await _seed_currency(client, "JPY", "Japanese Yen", 0)
+    usd_id = await _seed_currency(client, "USD", "US Dollar", 2)
+    # rate = 0.00500000: 1 JPY = 0.005 USD cents → 100 JPY = 0.5 cents → rounds to 1
+    await _seed_exchange_rate(client, jpy_id, usd_id, "0.00500000", "2024-02-01")
+
+    debit_id = await _seed_account(
+        db_session, "Cash-Round", AccountType.ASSET, "CV-1010"
+    )
+    credit_id = await _seed_account(
+        db_session, "Rev-Round", AccountType.REVENUE, "CV-4010"
+    )
+
+    payload = {
+        "currency_code": "JPY",
+        "description": "Rounding test",
+        "transaction_date": "2024-02-01",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 100,
+                "currency": "JPY",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 100,
+                "currency": "JPY",
+            },
+        ],
+    }
+    resp = await client.post("/api/v1/transactions", json=payload)
+    assert resp.status_code == 201
+    # 100 * 0.005 = 0.5 → ROUND_HALF_UP → 1
+    for entry in resp.json()["entries"]:
+        assert entry["converted_amount_usd"] == 1
 
 
 @pytest.mark.asyncio
@@ -217,8 +252,42 @@ async def test_both_entries_get_converted_amount_usd(
     db_session: AsyncSession,
 ) -> None:
     """All entries in a transaction receive converted_amount_usd, not just one side."""
-    # ✍️ TODO: implement — assert len(entries with converted_amount_usd > 0) == 2
-    ...
+    client = await authenticated_client("admin")
+    eur_id = await _seed_currency(client, "EUR", "Euro", 2)
+    usd_id = await _seed_currency(client, "USD", "US Dollar", 2)
+    await _seed_exchange_rate(client, eur_id, usd_id, "1.08000000", "2024-01-15")
+
+    debit_id = await _seed_account(
+        db_session, "Cash-Both", AccountType.ASSET, "CV-1020"
+    )
+    credit_id = await _seed_account(
+        db_session, "Rev-Both", AccountType.REVENUE, "CV-4020"
+    )
+
+    payload = {
+        "currency_code": "EUR",
+        "description": "Both entries converted",
+        "transaction_date": "2024-01-15",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 200,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 200,
+                "currency": "EUR",
+            },
+        ],
+    }
+    resp = await client.post("/api/v1/transactions", json=payload)
+    assert resp.status_code == 201
+    entries = resp.json()["entries"]
+    assert len(entries) == 2
+    assert all(e["converted_amount_usd"] == 216 for e in entries)  # 200 * 1.08 = 216
 
 
 # ---------------------------------------------------------------------------
