@@ -160,7 +160,7 @@ async def create_transaction(
     # ------------------------------------------------------------------
     converted_amounts = [
         await _get_converted_amount_usd(
-            db, entry.amount, payload.currency_code, payload.currency_code
+            db, entry.amount, payload.currency_code, payload.transaction_date
         )
         for entry in payload.entries
     ]
