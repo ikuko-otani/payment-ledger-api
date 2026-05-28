@@ -57,6 +57,7 @@ async def _create_posted_transaction(
                 direction=Direction.DEBIT,
                 amount=amount,
                 currency=currency,
+                converted_amount_usd=amount,
             ),
             Entry(
                 transaction_id=tx.id,
@@ -64,6 +65,7 @@ async def _create_posted_transaction(
                 direction=Direction.CREDIT,
                 amount=amount,
                 currency=currency,
+                converted_amount_usd=amount,
             ),
         ]
     )
@@ -137,6 +139,7 @@ async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> 
                 direction=Direction.DEBIT,
                 amount=200,
                 currency="EUR",
+                converted_amount_usd=200,
             ),
             Entry(
                 transaction_id=voided_tx.id,
@@ -144,6 +147,7 @@ async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> 
                 direction=Direction.CREDIT,
                 amount=200,
                 currency="EUR",
+                converted_amount_usd=200,
             ),
         ]
     )

@@ -46,6 +46,7 @@ class EntryRead(BaseModel):
     direction: Direction
     amount: int
     currency: str
+    converted_amount_usd: int  # USD cents, computed at write time (NOT NULL)
 
     model_config = {"from_attributes": True}
 
@@ -56,6 +57,7 @@ class EntryRead(BaseModel):
 
 
 class TransactionCreate(BaseModel):
+    currency_code: str = "USD"  # ISO 4217; defaults to base currency (no conversion)
     description: str
     transaction_date: date
     # amount removed: redundant in double-entry — derived from SUM(entries.amount)

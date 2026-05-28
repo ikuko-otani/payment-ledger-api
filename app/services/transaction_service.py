@@ -10,7 +10,8 @@ PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -18,9 +19,72 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.account import Account
+from app.models.currency import Currency
 from app.models.entry import Direction, Entry
+from app.models.exchange_rate import ExchangeRate
 from app.models.transaction import Transaction, TransactionStatus
 from app.schemas.transaction import TransactionCreate
+
+# Base currency: all amounts are converted to USD cents at write time.
+# Changing this constant requires a full data migration — treat as immutable.
+BASE_CURRENCY = "USD"
+
+
+async def _get_converted_amount_usd(
+    db: AsyncSession,
+    amount: int,
+    currency_code: str,
+    transaction_date: date,
+) -> int:
+    """Return the USD-cent equivalent of `amount` in `currency_code`.
+
+    - If currency_code == BASE_CURRENCY: returns amount unchanged (identity).
+    - Otherwise: looks up ExchangeRate(from=currency_code, to=USD, date=transaction_date)
+      and applies ROUND_HALF_UP rounding.
+    - Raises HTTP 422 if no matching ExchangeRate row exists.
+    """
+    if currency_code == BASE_CURRENCY:
+        return amount
+
+    # Resolve from_currency UUID
+    from_result = await db.execute(select(Currency).where(Currency.code == currency_code))
+    from_currency = from_result.scalar_one_or_none()
+    if from_currency is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown currency code: {currency_code!r}",
+        )
+
+    # Resolve to_currency (USD) UUID
+    to_result = await db.execute(select(Currency).where(Currency.code == BASE_CURRENCY))
+    to_currency = to_result.scalar_one_or_none()
+    if to_currency is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Base currency {BASE_CURRENCY!r} not found in currencies table",
+        )
+
+    # Look up ExchangeRate for (from, to, date)
+    rate_result = await db.execute(
+        select(ExchangeRate).where(
+            ExchangeRate.from_currency_id == from_currency.id,
+            ExchangeRate.to_currency_id == to_currency.id,
+            ExchangeRate.effective_date == transaction_date,
+        )
+    )
+    exchange_rate = rate_result.scalar_one_or_none()
+    if exchange_rate is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"No exchange rate found for {currency_code}→{BASE_CURRENCY} on {transaction_date}"
+            ),
+        )
+
+    converted = (Decimal(amount) * exchange_rate.rate).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    return int(converted)
 
 
 async def create_transaction(
@@ -86,6 +150,16 @@ async def create_transaction(
     db.add(transaction)
     await db.flush()
 
+    # ------------------------------------------------------------------
+    # Convert each entry amount to USD cents at write time
+    # ------------------------------------------------------------------
+    converted_amounts = [
+        await _get_converted_amount_usd(
+            db, entry.amount, payload.currency_code, payload.transaction_date
+        )
+        for entry in payload.entries
+    ]
+
     entries = [
         Entry(
             transaction_id=transaction.id,
@@ -93,8 +167,9 @@ async def create_transaction(
             direction=entry.direction,
             amount=entry.amount,
             currency=entry.currency,
+            converted_amount_usd=converted_amount,
         )
-        for entry in payload.entries
+        for entry, converted_amount in zip(payload.entries, converted_amounts)
     ]
     db.add_all(entries)
     await db.flush()
