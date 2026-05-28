@@ -278,22 +278,47 @@ attackers.
 
 ### ADR-006 — Rounding policy: ROUND_HALF_UP for currency conversion
 
-> ✍️ TODO: fill in during Step C — see CLAUDE.md 8.5 for format
->
-> Points to cover:
-> - Decision: ROUND_HALF_UP (not ROUND_HALF_EVEN / "banker's rounding")
-> - Why: ISO 20022 / customer-facing fintech convention; deterministic per transaction
-> - Trade-off vs ROUND_HALF_EVEN; when ROUND_HALF_EVEN would be preferred
-> - Python implementation: `Decimal.quantize(Decimal("1"), rounding=ROUND_HALF_UP)`
+**Decision**: Use `ROUND_HALF_UP` (always round 0.5 away from zero) when converting
+amounts to USD cents via `Decimal.quantize(Decimal("1"), rounding=ROUND_HALF_UP)`.
+
+**What was rejected**: `ROUND_HALF_EVEN` (banker's rounding — Python's built-in `round()`
+default), which rounds 0.5 to the nearest even number (2.5 → 2, 3.5 → 4).
+
+**Rationale**:
+- *Customer expectations*: ROUND_HALF_UP matches how most people learn to round.
+  A customer who sees ¥100 converted at a rate of 0.005 expects $0.01, not $0.00.
+- *ISO 20022 / fintech convention*: payment processors (Stripe, Mollie) and most
+  central bank guidelines specify ROUND_HALF_UP for customer-facing amounts.
+- *Determinism*: ROUND_HALF_UP produces the same result regardless of whether
+  the input is odd or even, making individual transactions easier to audit.
+
+**Trade-off**:
+- ROUND_HALF_EVEN minimises cumulative rounding error across large datasets
+  (useful in statistical aggregations). For per-transaction conversion where
+  each row is audited independently, ROUND_HALF_UP is preferred.
 
 ### ADR-007 — Hub-and-Spoke base currency (USD)
 
-> ✍️ TODO: fill in during Step C
->
-> Points to cover:
-> - Decision: single base currency (USD); all entries store converted_amount_usd
-> - Why: N rates instead of N*(N-1)/2 pairs
-> - Trade-off: two-hop rounding loss (JPY→USD→EUR via reporting); point-in-time snapshot
+**Decision**: Store a single `converted_amount_usd` (BigInteger, USD cents) on every
+`entries` row, computed at write time from the `ExchangeRate` table. USD is the base.
+
+**What was rejected**: Storing all N×(N-1)/2 currency pair rates, or converting
+on read (re-computing at query time using the current rate).
+
+**Rationale**:
+- *N rates vs N² pairs*: with N currencies, only N rates (each→USD) are required
+  instead of N×(N-1)/2 pairs. At 10 currencies: 10 vs 45 rows to maintain.
+- *Point-in-time snapshot*: the USD value at transaction date is immutable. Using
+  today's rate to value a past transaction violates accounting immutability.
+- *Simplicity*: a single base currency makes cross-currency reporting trivial —
+  SUM(converted_amount_usd) is always comparable regardless of source currency.
+
+**Trade-off**:
+- Two-hop conversions (JPY→USD→EUR for EUR reporting) accumulate two rounding
+  operations. Accepted at MVP scale; a dedicated reporting currency column can
+  be added per reporting requirement in a future sprint.
+- Changing BASE_CURRENCY requires a full data migration of all `converted_amount_usd`
+  values — treat the constant as immutable once production data exists.
 
 ---
 
