@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -30,17 +29,25 @@ async def _seed_account(
     currency: str = "USD",
 ) -> str:
     """Insert an account directly and return its id as str."""
-    account = Account(name=name, account_type=account_type, code=code, currency=currency)
+    account = Account(
+        name=name, account_type=account_type, code=code, currency=currency
+    )
     db_session.add(account)
     await db_session.commit()
     await db_session.refresh(account)
     return str(account.id)
 
 
-async def _seed_currency(client: AsyncClient, code: str, name: str, decimal_places: int) -> str:
+async def _seed_currency(
+    client: AsyncClient, code: str, name: str, decimal_places: int
+) -> str:
     """POST /currencies and return the created currency id."""
-    # ✍️ TODO: implement — POST to /api/v1/currencies, return resp.json()["id"]
-    ...
+    resp = await client.post(
+        "/api/v1/currencies",
+        json={"code": code, "name": name, "decimal_places": decimal_places},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
 
 
 async def _seed_exchange_rate(
@@ -51,8 +58,15 @@ async def _seed_exchange_rate(
     effective_date: str,
 ) -> None:
     """POST /exchange-rates to seed a rate for a given date."""
-    # ✍️ TODO: implement — POST to /api/v1/exchange-rates, assert 201
-    ...
+    resp = await client.post(
+        json={
+            "from_currency_id": from_currency_id,
+            "to_currency_id": to_currency_id,
+            "rate": rate,
+            "effective_date": effective_date,
+        },
+    )
+    assert resp.status_code == 201, resp.text
 
 
 # ---------------------------------------------------------------------------
