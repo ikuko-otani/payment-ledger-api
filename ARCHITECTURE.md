@@ -272,8 +272,6 @@ attackers.
 
 ---
 
----
-
 ## 8. Multi-Currency Design (S4)
 
 ### ADR-006 — Rounding policy: ROUND_HALF_UP for currency conversion
@@ -319,6 +317,44 @@ on read (re-computing at query time using the current rate).
   be added per reporting requirement in a future sprint.
 - Changing BASE_CURRENCY requires a full data migration of all `converted_amount_usd`
   values — treat the constant as immutable once production data exists.
+
+### ADR-008 — JSONB for audit log snapshot columns
+
+**Decision**: Store `before_value` and `after_value` in `audit_logs` as
+PostgreSQL `JSONB` columns rather than plain `JSON`, a normalized
+snapshot table, or application-level serialised strings.
+
+**What was rejected**:
+- *Plain `JSON`*: stored as text; no field-level indexing; slower reads
+  when searching within the payload.
+- *Normalised snapshot table*: a separate table with one row per changed
+  field (entity_id, field_name, old_value, new_value). Strictly relational
+  but requires a new migration every time a new auditable field is added.
+- *Event Sourcing (full event log)*: all state is derived by replaying
+  events; no current-state table. Provides maximum auditability but adds
+  significant operational complexity (event store, projection rebuild) that
+  is out of scope for MVP.
+
+**Rationale**:
+- *Schema agility*: adding a new field to `transactions` or `accounts` does
+  not require a migration to `audit_logs`. The JSONB snapshot captures
+  whatever the service layer serialises at write time.
+- *GIN index support*: `JSONB` supports GIN indexes, enabling efficient
+  field-level queries such as `before_value->>'status' = 'PENDING'` without
+  a full table scan. `JSON` (text storage) cannot use GIN indexes.
+- *Point-in-time snapshot*: capturing the full object state before and
+  after each write avoids the need to replay a chain of events to answer
+  "what did this record look like at time T?".
+
+**Trade-off**:
+- JSONB storage is slightly larger than plain JSON due to binary encoding
+  overhead, and write throughput is marginally lower due to parsing at
+  insert time. At the expected volume (one audit row per business
+  transaction), this is negligible.
+- Querying deeply nested JSONB structures requires PostgreSQL-specific
+  operators (`->`, `->>`, `@>`). This couples reporting queries to
+  PostgreSQL. Accepted as a deliberate choice; the project already depends
+  on PostgreSQL-specific features (UUID type, ENUM types, BIGINT).
 
 ---
 
