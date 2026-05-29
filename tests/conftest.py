@@ -71,7 +71,7 @@ async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE TABLE exchange_rates, entries, "
+                "TRUNCATE TABLE audit_logs, exchange_rates, entries, "
                 "transactions, accounts, users, currencies CASCADE"
             )
         )
@@ -81,7 +81,7 @@ async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE TABLE exchange_rates, entries, "
+                "TRUNCATE TABLE audit_logs, exchange_rates, entries, "
                 "transactions, accounts, users, currencies CASCADE"
             )
         )
