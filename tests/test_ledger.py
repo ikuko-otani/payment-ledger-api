@@ -16,7 +16,9 @@ async def _seed_account(
     account_type: AccountType = AccountType.ASSET,
     currency: str = "USD",
 ) -> Account:
-    account = Account(name=name, code=code, account_type=account_type, currency=currency)
+    account = Account(
+        name=name, code=code, account_type=account_type, currency=currency
+    )
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -35,8 +37,18 @@ def _tx_payload(
         "transaction_date": tx_date,
         "currency_code": currency,
         "entries": [
-            {"account_id": debit_id, "direction": "debit", "amount": amount, "currency": currency},
-            {"account_id": credit_id, "direction": "credit", "amount": amount, "currency": currency},
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": amount,
+                "currency": currency,
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": amount,
+                "currency": currency,
+            },
         ],
     }
 
@@ -127,7 +139,9 @@ async def test_get_ledger_pagination_limit_and_offset(
     for i in range(3):
         r = await async_client.post(
             "/api/v1/transactions",
-            json=_tx_payload(str(debit.id), str(credit.id), 100 + i, f"2026-0{i + 1}-01"),
+            json=_tx_payload(
+                str(debit.id), str(credit.id), 100 + i, f"2026-0{i + 1}-01"
+            ),
         )
         assert r.status_code == 201
 
