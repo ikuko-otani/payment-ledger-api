@@ -31,12 +31,12 @@ async def get_ledger(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[Entry]:
-    # 🔧 Call get_ledger_entries and return the result (≤5 lines)
-    # Pass all filter params as keyword arguments.
-    # TODO: return await get_ledger_entries(
-    #           db,
-    #           from_date=from_date, to_date=to_date,
-    #           account_id=account_id, currency_code=currency_code,
-    #           limit=limit, offset=offset,
-    #       )
-    return []  # placeholder — remove after implementing
+    return await get_ledger_entries(
+        db,
+        from_date=from_date,
+        to_date=to_date,
+        account_id=account_id,
+        currency_code=currency_code,
+        limit=limit,
+        offset=offset,
+    )
