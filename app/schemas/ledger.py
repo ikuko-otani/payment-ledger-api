@@ -11,21 +11,22 @@ from app.models.entry import Direction
 from app.models.transaction import TransactionStatus
 
 
-# ✍️ TransactionSummary — type hints and field names only (≤10 lines)
-# Hint: 3 fields — transaction_date (date), description (str), status (TransactionStatus)
 class TransactionSummary(BaseModel):
     # TODO: add the three fields
-    ...
+    transaction_date: date
+    description: str
+    status: TransactionStatus
 
     model_config = {"from_attributes": True}
 
 
-# ✍️ LedgerEntryRead — type hints and field names only (≤10 lines)
-# Hint: id, transaction_id, account_id (all uuid.UUID),
-#       direction (Direction), amount (int), currency (str),
-#       transaction (TransactionSummary)
 class LedgerEntryRead(BaseModel):
-    # TODO: add the seven fields
-    ...
+    id: uuid.UUID
+    transaction_id: uuid.UUID
+    account_id: uuid.UUID
+    direction: Direction
+    amount: int
+    currency: str
+    transaction: TransactionSummary
 
     model_config = {"from_attributes": True}
