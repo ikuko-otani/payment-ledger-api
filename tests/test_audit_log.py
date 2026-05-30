@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
 from app.models.audit_log import AuditLog
-from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionCreate, EntryCreate
 from app.models.entry import Direction
+from app.models.transaction import Transaction
+from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
 
 
@@ -128,6 +128,7 @@ async def test_audit_failure_rolls_back_transaction(
     nonexistent_user_id = uuid.uuid4()
     with pytest.raises((IntegrityError, Exception)):
         await create_transaction(db_session, payload, user_id=nonexistent_user_id)
+        await db_session.flush()
 
     await db_session.rollback()
 

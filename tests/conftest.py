@@ -6,10 +6,6 @@ import uuid
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import AsyncExitStack
 
-# Fixed UUID for the mock admin user used in async_client.
-# Must match what override_get_current_user returns so audit_logs FK is satisfied.
-_FIXTURE_ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-
 import pytest
 import pytest_asyncio
 from alembic.config import Config as AlembicConfig
@@ -29,6 +25,10 @@ from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.main import app as fastapi_app
 from app.models.user import User, UserRole
+
+# Fixed UUID for the mock admin user used in async_client.
+# Must match what override_get_current_user returns so audit_logs FK is satisfied.
+_FIXTURE_ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 @pytest.fixture(scope="session")
