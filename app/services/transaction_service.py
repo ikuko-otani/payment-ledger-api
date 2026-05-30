@@ -10,8 +10,10 @@ PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -24,6 +26,7 @@ from app.models.entry import Direction, Entry
 from app.models.exchange_rate import ExchangeRate
 from app.models.transaction import Transaction, TransactionStatus
 from app.schemas.transaction import TransactionCreate
+from app.services.audit_service import log_action
 
 # Base currency: all amounts are converted to USD cents at write time.
 # Changing this constant requires a full data migration — treat as immutable.
@@ -90,6 +93,7 @@ async def _get_converted_amount_usd(
 async def create_transaction(
     db: AsyncSession,
     payload: TransactionCreate,
+    user_id: uuid.UUID,
 ) -> Transaction:
     """Validate double-entry balance and persist Transaction + Entries."""
 
@@ -179,4 +183,19 @@ async def create_transaction(
         .where(Transaction.id == transaction.id)
         .options(selectinload(Transaction.entries))
     )
-    return tx_result.scalar_one()
+    loaded = tx_result.scalar_one()
+
+    after_value: dict[str, Any] = {
+        # TODO: implement (hint: str(loaded.id), loaded.description,
+        # loaded.status.value, str(loaded.transaction_date))
+    }
+    await log_action(
+        db,
+        user_id=user_id,
+        entity_type="transaction",
+        entity_id=loaded.id,
+        action="create",
+        before=None,
+        after=after_value,
+    )
+    return loaded

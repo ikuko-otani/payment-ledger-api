@@ -36,7 +36,6 @@ async def post_transaction(
     payload: TransactionCreate,
     db: DbDep,
     _: IdempotencyDep,
-    _current_user: AdminUser,
+    current_user: AdminUser,
 ) -> Transaction:
-    # create_transaction サービスを呼び出して返す
-    return await create_transaction(db, payload)
+    return await create_transaction(db, payload, current_user.id)
