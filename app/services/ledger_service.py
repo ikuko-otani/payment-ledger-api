@@ -34,26 +34,24 @@ async def get_ledger_entries(
     - .unique() is required after scalars() when contains_eager is used,
       because the JOIN can produce duplicate Entry rows in the raw result set.
     """
-    # 🔧 Build the filter list (≤20 lines)
-    # Accumulate non-None conditions into `filters: list`.
-    # Use Transaction.transaction_date for date range, Entry columns for the rest.
     filters = []
-    # TODO: if from_date is not None → append Transaction.transaction_date >= from_date
-    # TODO: if to_date is not None   → append Transaction.transaction_date <= to_date
-    # TODO: if account_id is not None → append Entry.account_id == account_id
-    # TODO: if currency_code is not None → append Entry.currency == currency_code
+    if from_date is not None:
+        filters.append(Transaction.transaction_date >= from_date)
+    if to_date is not None:
+        filters.append(Transaction.transaction_date <= to_date)
+    if account_id is not None:
+        filters.append(Entry.account_id == account_id)
+    if currency_code is not None:
+        filters.append(Entry.currency == currency_code)
 
-    # 🔧 Build and execute the query (≤10 lines)
-    # Chain: select(Entry) → .join(Entry.transaction) → .options(contains_eager(...))
-    #        → .where(*filters) → .order_by(date desc, Entry.id) → .offset/.limit
     stmt = (
-        # TODO: select(Entry)
-        # TODO: .join(Entry.transaction)
-        # TODO: .options(contains_eager(Entry.transaction))
-        # TODO: .where(*filters)
-        # TODO: .order_by(Transaction.transaction_date.desc(), Entry.id)
-        # TODO: .offset(offset).limit(limit)
-        select(Entry)  # placeholder — replace with full chain above
+        select(Entry)
+        .join(Entry.transaction)
+        .options(contains_eager(Entry.transaction))
+        .where(*filters)
+        .order_by(Transaction.transaction_date.desc(), Entry.id)
+        .offset(offset)
+        .limit(limit)
     )
     result = await db.execute(stmt)
     # .unique() de-duplicates rows that contain_eager can produce from the JOIN
