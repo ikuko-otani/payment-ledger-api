@@ -45,8 +45,11 @@ async def create_account(
     await db.refresh(account)
 
     after_value = {
-        # TODO: implement (hint: str(account.id), account.code, account.name,
-        # account.account_type.value, account.currency)
+        "id": str(account.id),
+        "code": account.code,
+        "name": account.name,
+        "account_type": account.account_type.value,
+        "currency": account.currency,
     }
     await log_action(
         db,
