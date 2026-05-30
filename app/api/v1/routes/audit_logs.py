@@ -31,16 +31,22 @@ async def get_audit_logs(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditLog]:
-    # 🔧 Build filter list — same pattern as get_ledger_entries (≤10 lines)
     filters = []
-    # TODO: if entity_type → append AuditLog.entity_type == entity_type
-    # TODO: if entity_id   → append AuditLog.entity_id == entity_id
-    # TODO: if from_dt     → append AuditLog.created_at >= from_dt
-    # TODO: if to_dt       → append AuditLog.created_at <= to_dt
+    if entity_type:
+        filters.append(AuditLog.entity_type == entity_type)
+    if entity_id:
+        filters.append(AuditLog.entity_id == entity_id)
+    if from_dt:
+        filters.append(AuditLog.created_at >= from_dt)
+    if to_dt:
+        filters.append(AuditLog.created_at <= to_dt)
 
-    # 🔧 Execute query and return (≤5 lines)
-    # select(AuditLog).where(*filters).order_by(created_at desc).offset/limit
-    # TODO: stmt = select(AuditLog).where(*filters).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
-    # TODO: result = await db.execute(stmt)
-    # TODO: return list(result.scalars().all())
-    return []  # placeholder — remove after implementing
+    stmt = (
+        select(AuditLog)
+        .where(*filters)
+        .order_by(AuditLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
