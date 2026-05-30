@@ -14,6 +14,7 @@ from app.core.deps import AdminUser, AuditorOrAdminUser
 from app.db.session import get_db
 from app.models.account import Account
 from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
+from app.services.audit_service import log_action
 from app.services.balance import calculate_balance
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -28,7 +29,11 @@ async def list_accounts(db: DbDep, _current_user: AuditorOrAdminUser) -> list[Ac
 
 
 @router.post("", response_model=AccountRead, status_code=201)
-async def create_account(payload: AccountCreate, db: DbDep, _current_user: AdminUser) -> Account:
+async def create_account(
+    payload: AccountCreate,
+    db: DbDep,
+    current_user: AdminUser,
+) -> Account:
     account = Account(
         code=payload.code,
         name=payload.name,
@@ -38,6 +43,23 @@ async def create_account(payload: AccountCreate, db: DbDep, _current_user: Admin
     db.add(account)
     await db.flush()
     await db.refresh(account)
+
+    after_value = {
+        "id": str(account.id),
+        "code": account.code,
+        "name": account.name,
+        "account_type": account.account_type.value,
+        "currency": account.currency,
+    }
+    await log_action(
+        db,
+        user_id=current_user.id,
+        entity_type="account",
+        entity_id=account.id,
+        action="create",
+        before=None,
+        after=after_value,
+    )
     return account
 
 

@@ -10,8 +10,10 @@ PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -24,6 +26,7 @@ from app.models.entry import Direction, Entry
 from app.models.exchange_rate import ExchangeRate
 from app.models.transaction import Transaction, TransactionStatus
 from app.schemas.transaction import TransactionCreate
+from app.services.audit_service import log_action
 
 # Base currency: all amounts are converted to USD cents at write time.
 # Changing this constant requires a full data migration — treat as immutable.
@@ -47,7 +50,9 @@ async def _get_converted_amount_usd(
         return amount
 
     # Resolve from_currency UUID
-    from_result = await db.execute(select(Currency).where(Currency.code == currency_code))
+    from_result = await db.execute(
+        select(Currency).where(Currency.code == currency_code)
+    )
     from_currency = from_result.scalar_one_or_none()
     if from_currency is None:
         raise HTTPException(
@@ -90,6 +95,7 @@ async def _get_converted_amount_usd(
 async def create_transaction(
     db: AsyncSession,
     payload: TransactionCreate,
+    user_id: uuid.UUID,
 ) -> Transaction:
     """Validate double-entry balance and persist Transaction + Entries."""
 
@@ -130,7 +136,9 @@ async def create_transaction(
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
-    credit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.CREDIT)
+    credit_sum = sum(
+        e.amount for e in payload.entries if e.direction == Direction.CREDIT
+    )
 
     if debit_sum != credit_sum:
         raise HTTPException(
@@ -179,4 +187,21 @@ async def create_transaction(
         .where(Transaction.id == transaction.id)
         .options(selectinload(Transaction.entries))
     )
-    return tx_result.scalar_one()
+    loaded = tx_result.scalar_one()
+
+    after_value: dict[str, Any] = {
+        "id": str(loaded.id),
+        "description": loaded.description,
+        "status": loaded.status.value,
+        "transaction_date": str(loaded.transaction_date),
+    }
+    await log_action(
+        db,
+        user_id=user_id,
+        entity_type="transaction",
+        entity_id=loaded.id,
+        action="create",
+        before=None,
+        after=after_value,
+    )
+    return loaded

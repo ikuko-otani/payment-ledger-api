@@ -26,6 +26,10 @@ from app.db.session import get_db
 from app.main import app as fastapi_app
 from app.models.user import User, UserRole
 
+# Fixed UUID for the mock admin user used in async_client.
+# Must match what override_get_current_user returns so audit_logs FK is satisfied.
+_FIXTURE_ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Generator[PostgresContainer, None, None]:
@@ -114,12 +118,28 @@ async def async_client(
     Key design: a NEW session is created per-request inside the override,
     not shared across requests. This avoids asyncpg 'another operation in
     progress' errors that occurred in S1-4 when a single session was reused.
+
+    The fixture seeds _FIXTURE_ADMIN_ID into the users table so that
+    audit_logs.user_id FK is satisfied when log_action() runs.
     """
     session_factory = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
+
+    # Seed a real User row so audit_logs FK (user_id → users.id) is satisfied.
+    async with session_factory() as seed_session:
+        seed_session.add(
+            User(
+                id=_FIXTURE_ADMIN_ID,
+                email="fixture@example.com",
+                hashed_password="",
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+        )
+        await seed_session.commit()
 
     # Override get_db to yield a fresh session for each request
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -131,10 +151,10 @@ async def async_client(
                 await session.rollback()
                 raise
 
-    # get_current_user を常に固定ユーザーで返す mock
+    # get_current_user を常に固定ユーザーで返す mock（DB に seed した ID と一致させる）
     async def override_get_current_user() -> User:
         return User(
-            id=uuid.uuid4(),
+            id=_FIXTURE_ADMIN_ID,
             email="fixture@example.com",
             hashed_password="",
             role=UserRole.ADMIN,
