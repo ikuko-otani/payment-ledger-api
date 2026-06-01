@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import date
+from decimal import Decimal
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
+from app.models.currency import Currency
+from app.models.exchange_rate import ExchangeRate
+
+_FIXTURE_ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+async def _seed_eur_rate(db: AsyncSession, tx_date: str) -> None:
+    eur = Currency(code="EUR", name="Euro", decimal_places=2)
+    usd = Currency(code="USD", name="US Dollar", decimal_places=2)
+    db.add_all([eur, usd])
+    await db.flush()
+    db.add(
+        ExchangeRate(
+            from_currency_id=eur.id,
+            to_currency_id=usd.id,
+            rate=Decimal("1.10"),
+            effective_date=date.fromisoformat(tx_date),
+            created_by_id=_FIXTURE_ADMIN_ID,
+        )
+    )
+    await db.commit()
 
 
 async def _seed_account(
@@ -16,9 +41,7 @@ async def _seed_account(
     account_type: AccountType = AccountType.ASSET,
     currency: str = "USD",
 ) -> Account:
-    account = Account(
-        name=name, code=code, account_type=account_type, currency=currency
-    )
+    account = Account(name=name, code=code, account_type=account_type, currency=currency)
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -88,21 +111,36 @@ async def test_get_ledger_currency_filter_returns_only_matching_currency(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """currency_code filter must restrict entries to that currency."""
+    """currency_code filter must exclude entries of other currencies."""
+    await _seed_eur_rate(db_session, "2026-04-01")
+
     debit = await _seed_account(db_session, "Cash-L2", "1101")
     credit = await _seed_account(db_session, "Revenue-L2", "4001", AccountType.REVENUE)
 
-    resp = await async_client.post(
+    # USD transaction
+    resp_usd = await async_client.post(
         "/api/v1/transactions",
         json=_tx_payload(str(debit.id), str(credit.id), 300, "2026-04-01", "USD"),
     )
-    assert resp.status_code == 201
+    assert resp_usd.status_code == 201
 
-    resp_filter = await async_client.get("/api/v1/ledger?currency_code=USD")
-    assert resp_filter.status_code == 200
-    data = resp_filter.json()
+    # EUR transaction
+    resp_eur = await async_client.post(
+        "/api/v1/transactions",
+        json=_tx_payload(str(debit.id), str(credit.id), 110, "2026-04-01", "EUR"),
+    )
+    assert resp_eur.status_code == 201
+
+    # EUR filter
+    resp = await async_client.get("/api/v1/ledger?currency_code=EUR")
+    assert resp.status_code == 200
+    data = resp.json()
     assert len(data) > 0
-    assert all(item["currency"] == "USD" for item in data)
+    assert all(item["currency"] == "EUR" for item in data)
+
+    # USD filter
+    resp_usd_filter = await async_client.get("/api/v1/ledger?currency_code=USD")
+    assert all(item["currency"] == "USD" for item in resp_usd_filter.json())
 
 
 @pytest.mark.asyncio
@@ -139,9 +177,7 @@ async def test_get_ledger_pagination_limit_and_offset(
     for i in range(3):
         r = await async_client.post(
             "/api/v1/transactions",
-            json=_tx_payload(
-                str(debit.id), str(credit.id), 100 + i, f"2026-0{i + 1}-01"
-            ),
+            json=_tx_payload(str(debit.id), str(credit.id), 100 + i, f"2026-0{i + 1}-01"),
         )
         assert r.status_code == 201
 
