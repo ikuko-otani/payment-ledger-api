@@ -26,9 +26,7 @@ async def _seed_account(
     currency: str = "EUR",
 ) -> str:
     """Insert an account and return its id as str."""
-    account = Account(
-        name=name, account_type=account_type, code=code, currency=currency
-    )
+    account = Account(name=name, account_type=account_type, code=code, currency=currency)
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -41,9 +39,7 @@ async def test_create_transaction_writes_audit_log(
     db_session: AsyncSession,
 ) -> None:
     debit = await _seed_account(db_session, "Cash-Audit", AccountType.ASSET, "1100")
-    credit = await _seed_account(
-        db_session, "Revenue-Audit", AccountType.REVENUE, "4000"
-    )
+    credit = await _seed_account(db_session, "Revenue-Audit", AccountType.REVENUE, "4000")
 
     payload = {
         "description": "Audit test",
@@ -102,9 +98,7 @@ async def test_audit_failure_rolls_back_transaction(
     db_session: AsyncSession,
 ) -> None:
     debit = await _seed_account(db_session, "Cash-Atomic", AccountType.ASSET, "1101")
-    credit = await _seed_account(
-        db_session, "Revenue-Atomic", AccountType.REVENUE, "4001"
-    )
+    credit = await _seed_account(db_session, "Revenue-Atomic", AccountType.REVENUE, "4001")
 
     payload = TransactionCreate(
         description="Atomicity test",
