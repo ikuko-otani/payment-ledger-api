@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CurrencyCreate(BaseModel):
@@ -29,7 +29,7 @@ class CurrencyRead(BaseModel):
 class ExchangeRateCreate(BaseModel):
     from_currency_id: uuid.UUID
     to_currency_id: uuid.UUID
-    rate: Decimal
+    rate: Decimal = Field(gt=Decimal("0"))
     effective_date: date
 
 
