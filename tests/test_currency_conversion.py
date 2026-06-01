@@ -29,18 +29,14 @@ async def _seed_account(
     currency: str = "USD",
 ) -> str:
     """Insert an account directly and return its id as str."""
-    account = Account(
-        name=name, account_type=account_type, code=code, currency=currency
-    )
+    account = Account(name=name, account_type=account_type, code=code, currency=currency)
     db_session.add(account)
     await db_session.commit()
     await db_session.refresh(account)
     return str(account.id)
 
 
-async def _seed_currency(
-    client: AsyncClient, code: str, name: str, decimal_places: int
-) -> str:
+async def _seed_currency(client: AsyncClient, code: str, name: str, decimal_places: int) -> str:
     """POST /currencies and return the created currency id."""
     resp = await client.post(
         "/api/v1/currencies",
@@ -84,9 +80,7 @@ async def test_usd_transaction_stores_identity_converted_amount(
     client = await authenticated_client("admin")
     await _seed_currency(client, "USD", "US Dollar", 2)
     debit_id = await _seed_account(db_session, "Cash-USD", AccountType.ASSET, "CV-1000")
-    credit_id = await _seed_account(
-        db_session, "Revenue-USD", AccountType.REVENUE, "CV-4000"
-    )
+    credit_id = await _seed_account(db_session, "Revenue-USD", AccountType.REVENUE, "CV-4000")
 
     payload = {
         "currency_code": "USD",
@@ -125,9 +119,7 @@ async def test_jpy_transaction_converts_to_usd_correctly(
     await _seed_exchange_rate(client, jpy_id, usd_id, "0.00670000", "2024-01-15")
 
     debit_id = await _seed_account(db_session, "Cash-JPY", AccountType.ASSET, "CV-1001")
-    credit_id = await _seed_account(
-        db_session, "Revenue-JPY", AccountType.REVENUE, "CV-4001"
-    )
+    credit_id = await _seed_account(db_session, "Revenue-JPY", AccountType.REVENUE, "CV-4001")
 
     # 15000 JPY × 0.0067 = 100.5 USD → 100 cents (ROUND_HALF_UP → 101)
     # Wait: 15000 * 0.0067 = 100.5 → ROUND_HALF_UP → 101 USD cents = $1.01
@@ -170,9 +162,7 @@ async def test_eur_transaction_converts_to_usd_correctly(
     await _seed_exchange_rate(client, eur_id, usd_id, "1.08000000", "2024-01-15")
 
     debit_id = await _seed_account(db_session, "Cash-EUR", AccountType.ASSET, "CV-1002")
-    credit_id = await _seed_account(
-        db_session, "Revenue-EUR", AccountType.REVENUE, "CV-4002"
-    )
+    credit_id = await _seed_account(db_session, "Revenue-EUR", AccountType.REVENUE, "CV-4002")
 
     # 500 EUR cents (= €5.00) × 1.08 = 540 USD cents (= $5.40)
     payload = {
@@ -213,12 +203,8 @@ async def test_converted_amount_usd_rounds_half_up(
     # rate = 0.00500000: 1 JPY = 0.005 USD cents → 100 JPY = 0.5 cents → rounds to 1
     await _seed_exchange_rate(client, jpy_id, usd_id, "0.00500000", "2024-02-01")
 
-    debit_id = await _seed_account(
-        db_session, "Cash-Round", AccountType.ASSET, "CV-1010"
-    )
-    credit_id = await _seed_account(
-        db_session, "Rev-Round", AccountType.REVENUE, "CV-4010"
-    )
+    debit_id = await _seed_account(db_session, "Cash-Round", AccountType.ASSET, "CV-1010")
+    credit_id = await _seed_account(db_session, "Rev-Round", AccountType.REVENUE, "CV-4010")
 
     payload = {
         "currency_code": "JPY",
@@ -257,12 +243,8 @@ async def test_both_entries_get_converted_amount_usd(
     usd_id = await _seed_currency(client, "USD", "US Dollar", 2)
     await _seed_exchange_rate(client, eur_id, usd_id, "1.08000000", "2024-01-15")
 
-    debit_id = await _seed_account(
-        db_session, "Cash-Both", AccountType.ASSET, "CV-1020"
-    )
-    credit_id = await _seed_account(
-        db_session, "Rev-Both", AccountType.REVENUE, "CV-4020"
-    )
+    debit_id = await _seed_account(db_session, "Cash-Both", AccountType.ASSET, "CV-1020")
+    credit_id = await _seed_account(db_session, "Rev-Both", AccountType.REVENUE, "CV-4020")
 
     payload = {
         "currency_code": "EUR",
@@ -306,12 +288,8 @@ async def test_missing_exchange_rate_returns_422(
     await _seed_currency(client, "JPY", "Japanese Yen", 0)
     await _seed_currency(client, "USD", "US Dollar", 2)
 
-    debit_id = await _seed_account(
-        db_session, "Cash-NoRate", AccountType.ASSET, "CV-1030"
-    )
-    credit_id = await _seed_account(
-        db_session, "Rev-NoRate", AccountType.REVENUE, "CV-4030"
-    )
+    debit_id = await _seed_account(db_session, "Cash-NoRate", AccountType.ASSET, "CV-1030")
+    credit_id = await _seed_account(db_session, "Rev-NoRate", AccountType.REVENUE, "CV-4030")
 
     payload = {
         "currency_code": "JPY",
@@ -348,12 +326,8 @@ async def test_exchange_rate_wrong_date_returns_422(
     # Seed rate for 2024-01-01 only
     await _seed_exchange_rate(client, jpy_id, usd_id, "0.00670000", "2024-01-01")
 
-    debit_id = await _seed_account(
-        db_session, "Cash-WDate", AccountType.ASSET, "CV-1040"
-    )
-    credit_id = await _seed_account(
-        db_session, "Rev-WDate", AccountType.REVENUE, "CV-4040"
-    )
+    debit_id = await _seed_account(db_session, "Cash-WDate", AccountType.ASSET, "CV-1040")
+    credit_id = await _seed_account(db_session, "Rev-WDate", AccountType.REVENUE, "CV-4040")
 
     payload = {
         "currency_code": "JPY",
@@ -388,9 +362,7 @@ async def test_unknown_currency_code_returns_422(
     # Do NOT seed "XXX" currency
 
     debit_id = await _seed_account(db_session, "Cash-Unk", AccountType.ASSET, "CV-1050")
-    credit_id = await _seed_account(
-        db_session, "Rev-Unk", AccountType.REVENUE, "CV-4050"
-    )
+    credit_id = await _seed_account(db_session, "Rev-Unk", AccountType.REVENUE, "CV-4050")
 
     payload = {
         "currency_code": "XXX",
@@ -451,9 +423,7 @@ async def test_reverse_direction_rate_only_returns_422(
     await _seed_exchange_rate(client, eur_id, jpy_id, "160.00000000", "2024-01-15")
 
     debit_id = await _seed_account(db_session, "Cash-Rev", AccountType.ASSET, "CV-1060")
-    credit_id = await _seed_account(
-        db_session, "Rev-Rev", AccountType.REVENUE, "CV-4060"
-    )
+    credit_id = await _seed_account(db_session, "Rev-Rev", AccountType.REVENUE, "CV-4060")
 
     payload = {
         "currency_code": "EUR",
