@@ -385,3 +385,64 @@ async def test_unknown_currency_code_returns_422(
     }
     resp = await client.post("/api/v1/transactions", json=payload)
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_zero_rate_returns_422_on_exchange_rate_creation(
+    authenticated_client,
+    db_session: AsyncSession,
+) -> None:
+    """POST /exchange-rates with rate=0 must be rejected with 422 (Pydantic validation)."""
+    client = await authenticated_client("admin")
+    eur_id = await _seed_currency(client, "EUR", "Euro", 2)
+    usd_id = await _seed_currency(client, "USD", "US Dollar", 2)
+
+    resp = await client.post(
+        "/api/v1/exchange-rates",
+        json={
+            "from_currency_id": eur_id,
+            "to_currency_id": usd_id,
+            "rate": "0",
+            "effective_date": "2024-01-15",
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reverse_direction_rate_only_returns_422(
+    authenticated_client,
+    db_session: AsyncSession,
+) -> None:
+    """422 when only EUR→JPY rate exists but transaction needs EUR→USD."""
+    client = await authenticated_client("admin")
+    eur_id = await _seed_currency(client, "EUR", "Euro", 2)
+    jpy_id = await _seed_currency(client, "JPY", "Japanese Yen", 0)
+    await _seed_currency(client, "USD", "US Dollar", 2)
+    # Seed EUR→JPY only — EUR→USD is absent
+    await _seed_exchange_rate(client, eur_id, jpy_id, "160.00000000", "2024-01-15")
+
+    debit_id = await _seed_account(db_session, "Cash-Rev", AccountType.ASSET, "CV-1060")
+    credit_id = await _seed_account(db_session, "Rev-Rev", AccountType.REVENUE, "CV-4060")
+
+    payload = {
+        "currency_code": "EUR",
+        "description": "Reverse direction rate test",
+        "transaction_date": "2024-01-15",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 100,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 100,
+                "currency": "EUR",
+            },
+        ],
+    }
+    resp = await client.post("/api/v1/transactions", json=payload)
+    assert resp.status_code == 422

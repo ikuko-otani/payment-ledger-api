@@ -50,9 +50,7 @@ async def _get_converted_amount_usd(
         return amount
 
     # Resolve from_currency UUID
-    from_result = await db.execute(
-        select(Currency).where(Currency.code == currency_code)
-    )
+    from_result = await db.execute(select(Currency).where(Currency.code == currency_code))
     from_currency = from_result.scalar_one_or_none()
     if from_currency is None:
         raise HTTPException(
@@ -136,9 +134,7 @@ async def create_transaction(
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
-    credit_sum = sum(
-        e.amount for e in payload.entries if e.direction == Direction.CREDIT
-    )
+    credit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.CREDIT)
 
     if debit_sum != credit_sum:
         raise HTTPException(
