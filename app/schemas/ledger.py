@@ -12,7 +12,7 @@ from app.models.transaction import TransactionStatus
 
 
 class TransactionSummary(BaseModel):
-    # TODO: add the three fields
+    id: uuid.UUID
     transaction_date: date
     description: str
     status: TransactionStatus
@@ -22,7 +22,6 @@ class TransactionSummary(BaseModel):
 
 class LedgerEntryRead(BaseModel):
     id: uuid.UUID
-    transaction_id: uuid.UUID
     account_id: uuid.UUID
     direction: Direction
     amount: int
