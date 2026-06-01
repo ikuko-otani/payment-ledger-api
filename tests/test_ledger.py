@@ -41,7 +41,9 @@ async def _seed_account(
     account_type: AccountType = AccountType.ASSET,
     currency: str = "USD",
 ) -> Account:
-    account = Account(name=name, code=code, account_type=account_type, currency=currency)
+    account = Account(
+        name=name, code=code, account_type=account_type, currency=currency
+    )
     db.add(account)
     await db.commit()
     await db.refresh(account)
@@ -177,7 +179,9 @@ async def test_get_ledger_pagination_limit_and_offset(
     for i in range(3):
         r = await async_client.post(
             "/api/v1/transactions",
-            json=_tx_payload(str(debit.id), str(credit.id), 100 + i, f"2026-0{i + 1}-01"),
+            json=_tx_payload(
+                str(debit.id), str(credit.id), 100 + i, f"2026-0{i + 1}-01"
+            ),
         )
         assert r.status_code == 201
 
@@ -193,3 +197,51 @@ async def test_get_ledger_pagination_limit_and_offset(
     ids1 = {item["id"] for item in page1}
     ids2 = {item["id"] for item in page2}
     assert ids1.isdisjoint(ids2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tx_date, query_params, should_be_included",
+    [
+        ("2026-03-01", "from=2026-03-01", True),
+        ("2026-03-31", "to=2026-03-31", True),
+        ("2026-02-28", "from=2026-03-01", False),
+        ("2026-04-01", "to=2026-03-31", False),
+    ],
+)
+async def test_get_ledger_date_boundary(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tx_date: str,
+    query_params: str,
+    should_be_included: bool,
+) -> None:
+    debit = await _seed_account(
+        db_session, f"Cash-B-{tx_date}", f"BD{tx_date[:7].replace('-','')}"
+    )
+    credit = await _seed_account(
+        db_session,
+        f"Revenue-B-{tx_date}",
+        f"BR{tx_date[:7].replace('-','')}",
+        AccountType.REVENUE,
+    )
+
+    resp_post = await async_client.post(
+        "/api/v1/transactions",
+        json=_tx_payload(str(debit.id), str(credit.id), 250, tx_date),
+    )
+    assert resp_post.status_code == 201
+    tx_id = resp_post.json()["id"]
+
+    resp = await async_client.get(f"/api/v1/ledger?{query_params}")
+    assert resp.status_code == 200
+    returned_tx_ids = {item["transaction"]["id"] for item in resp.json()}
+
+    if should_be_included:
+        assert (
+            tx_id in returned_tx_ids
+        ), f"Expected tx on {tx_date} to be included with {query_params}"
+    else:
+        assert (
+            tx_id not in returned_tx_ids
+        ), f"Expected tx on {tx_date} to be excluded with {query_params}"
