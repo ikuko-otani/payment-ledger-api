@@ -13,6 +13,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         start_time = time.perf_counter()
         response: Response = await call_next(request)
-        # TODO: implement (hint: compute process_time from start_time,
-        #   then call logger.info() with method, path, status_code, process_time)
+        process_time = time.perf_counter() - start_time
+        logger.info(
+            "request",
+            mothod=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            process_time=round(process_time, 4),
+        )
         return response
