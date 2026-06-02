@@ -356,6 +356,36 @@ snapshot table, or application-level serialised strings.
   PostgreSQL. Accepted as a deliberate choice; the project already depends
   on PostgreSQL-specific features (UUID type, ENUM types, BIGINT).
 
+### ADR-009 — `Numeric(18,8)` for exchange rate storage, not `Float`
+
+**Decision**: Store `exchange_rates.rate` as PostgreSQL `NUMERIC(18,8)` (mapped to
+Python `decimal.Decimal`), not as `FLOAT` or `REAL`.
+
+**What was rejected**: `FLOAT` / `REAL` (IEEE 754 binary floating-point). These types
+represent decimal fractions as sums of powers of two, so `0.1` cannot be stored
+exactly — it becomes `0.1000000000000000055511151231257827021181583404541015625`.
+
+**Rationale**:
+- *Exact arithmetic*: `NUMERIC` performs decimal arithmetic with no binary approximation.
+  `SELECT 0.1 + 0.2` returns `0.3` exactly; with `FLOAT` it returns `0.30000000000000001`.
+- *Error compounding*: a single conversion step introduces a negligible error, but when
+  amounts are summed across thousands of entries for reporting, IEEE 754 drift accumulates.
+  `NUMERIC` keeps every intermediate result exact.
+- *Audit alignment*: the `rate` stored in `exchange_rates` is the rate recorded at
+  transaction time and must reproduce the exact `converted_amount_usd` on demand.
+  A binary-float rate cannot guarantee this reproduction.
+- *Python `Decimal` symmetry*: SQLAlchemy maps `NUMERIC` ↔ `decimal.Decimal`, which uses
+  the same decimal model. Mixing `Decimal` in Python with a `FLOAT` column would silently
+  lose precision at the ORM boundary.
+
+**Trade-off**:
+- `NUMERIC` arithmetic is slower than native `FLOAT` arithmetic (software decimal vs.
+  hardware FPU). At one exchange-rate lookup per transaction write, this overhead is
+  immeasurable. It would matter only for bulk statistical computations — which belong
+  in a reporting layer, not the OLTP write path.
+- Precision `(18,8)` supports rates up to `9_999_999_999.99999999` with 8 decimal places,
+  covering all fiat currencies and most crypto assets at realistic exchange rates.
+
 ---
 
 ## 6. What I Would Add in Production
