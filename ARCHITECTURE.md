@@ -356,6 +356,80 @@ snapshot table, or application-level serialised strings.
   PostgreSQL. Accepted as a deliberate choice; the project already depends
   on PostgreSQL-specific features (UUID type, ENUM types, BIGINT).
 
+### ADR-009 — `Numeric(18,8)` for exchange rate storage, not `Float`
+
+**Decision**: Store `exchange_rates.rate` as PostgreSQL `NUMERIC(18,8)` (mapped to
+Python `decimal.Decimal`), not as `FLOAT` or `REAL`.
+
+**What was rejected**: `FLOAT` / `REAL` (IEEE 754 binary floating-point). These types
+represent decimal fractions as sums of powers of two, so `0.1` cannot be stored
+exactly — it becomes `0.1000000000000000055511151231257827021181583404541015625`.
+
+**Rationale**:
+- *Exact arithmetic*: `NUMERIC` performs decimal arithmetic with no binary approximation.
+  `SELECT 0.1 + 0.2` returns `0.3` exactly; with `FLOAT` it returns `0.30000000000000001`.
+- *Error compounding*: a single conversion step introduces a negligible error, but when
+  amounts are summed across thousands of entries for reporting, IEEE 754 drift accumulates.
+  `NUMERIC` keeps every intermediate result exact.
+- *Audit alignment*: the `rate` stored in `exchange_rates` is the rate recorded at
+  transaction time and must reproduce the exact `converted_amount_usd` on demand.
+  A binary-float rate cannot guarantee this reproduction.
+- *Python `Decimal` symmetry*: SQLAlchemy maps `NUMERIC` ↔ `decimal.Decimal`, which uses
+  the same decimal model. Mixing `Decimal` in Python with a `FLOAT` column would silently
+  lose precision at the ORM boundary.
+
+**Trade-off**:
+- `NUMERIC` arithmetic is slower than native `FLOAT` arithmetic (software decimal vs.
+  hardware FPU). At one exchange-rate lookup per transaction write, this overhead is
+  immeasurable. It would matter only for bulk statistical computations — which belong
+  in a reporting layer, not the OLTP write path.
+- Precision `(18,8)` supports rates up to `9_999_999_999.99999999` with 8 decimal places,
+  covering all fiat currencies and most crypto assets at realistic exchange rates.
+
+### ADR-010 — Append-only AuditLog over Event Sourcing (MVP)
+
+**Decision**: Record auditable state changes by appending rows to `audit_logs`
+(one row per write, carrying `before_value` and `after_value` as JSONB snapshots)
+rather than adopting a full Event Sourcing architecture.
+
+**What was rejected**: Event Sourcing — a pattern where all application state changes
+are stored exclusively as an ordered, immutable log of domain events. Current state
+is never stored directly; it is derived by replaying the event stream (or by maintaining
+a projection). Frameworks: Axon (Java), EventStoreDB, Kafka with compaction.
+
+**Rationale**:
+- *Complexity cost at MVP scale*: Event Sourcing requires an event store, projection
+  rebuilds on schema change, eventual consistency between projections and queries,
+  and specialised tooling for snapshotting and event versioning. None of this
+  infrastructure exists in the current stack.
+- *Current-state queries remain simple*: with append-only AuditLog, `SELECT * FROM
+  accounts WHERE id = ?` still returns current state directly. In full Event Sourcing,
+  answering the same query requires either a materialised projection or a full replay —
+  a non-trivial read path for an OLTP API.
+- *Point-in-time reconstruction*: `before_value` / `after_value` JSONB snapshots allow
+  answering "what did this record look like at time T?" without replaying a chain of
+  events. For the current audit requirements (regulatory query, dispute resolution),
+  snapshot-based lookup is sufficient.
+- *Bounded scope*: the audit requirement is "who changed what and when" — a compliance
+  need. Event Sourcing solves a broader architectural problem (temporal queries, CQRS,
+  event-driven fan-out). Adopting it for a single compliance requirement would be
+  over-engineering.
+
+**Future migration path** (not closed):
+If the system grows to require real-time event-driven fan-out (e.g. downstream
+accounting systems, fraud detection pipelines), the append-only `audit_logs` table
+can be treated as a lightweight outbox. A future sprint could introduce an Outbox
+pattern (Debezium CDC → Kafka) without rewriting the current write path. Full Event
+Sourcing remains an option if projection-based reporting becomes a first-class
+requirement.
+
+**Trade-off**:
+- Append-only AuditLog cannot reconstruct *all* application state from the log alone —
+  only the fields captured in `before_value` / `after_value`. A bug that skips the
+  audit write leaves a gap. Event Sourcing has no such gap by construction.
+  Mitigation: the service layer always writes `audit_logs` inside the same database
+  transaction as the entity write (atomicity via PostgreSQL).
+
 ---
 
 ## 6. What I Would Add in Production
