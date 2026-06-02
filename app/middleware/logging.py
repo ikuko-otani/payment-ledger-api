@@ -16,7 +16,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         process_time = time.perf_counter() - start_time
         logger.info(
             "request",
-            mothod=request.method,
+            method=request.method,
             path=request.url.path,
             status_code=response.status_code,
             process_time=round(process_time, 4),
