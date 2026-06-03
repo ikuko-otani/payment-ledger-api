@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import structlog
 import structlog.contextvars
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -16,7 +17,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         structlog.contextvars.clear_contextvars()
 
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-        trace_id = str(uuid.uuid4())  # stub: replaced by OTel context in S5-3
+        # TODO: implement (hint: span = trace.get_current_span(); trace_id = format(span.get_span_context().trace_id, "032x"))
+        trace_id = str(uuid.uuid4())  # stub: to be replaced in Step C
 
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
