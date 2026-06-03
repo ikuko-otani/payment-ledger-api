@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 import structlog.contextvars
 import structlog.testing
-
 from httpx import AsyncClient
 
 
