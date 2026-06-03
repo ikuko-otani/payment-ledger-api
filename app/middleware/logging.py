@@ -13,12 +13,22 @@ logger = structlog.get_logger(__name__)
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # TODO: implement - clear_contextvars(), then extract/generate request_id and trace_id
-        # TODO: implement - bind_contextvars(request_id=..., trace_id=...)
+        structlog.contextvars.clear_contextvars()
+
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        trace_id = str(uuid.uuid4())  # stub: replaced by OTel context in S5-3
+
+        structlog.contextvars.bind_contextvars(
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+
         start_time = time.perf_counter()
         response: Response = await call_next(request)
         latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        # TODO: implement - response.headers["X-Request-ID"] = request_id
+
+        response.headers["X-Request-ID"] = request_id
+
         logger.info(
             "request",
             method=request.method,
