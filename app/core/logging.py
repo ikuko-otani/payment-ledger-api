@@ -1,11 +1,13 @@
 import logging
 
 import structlog
+import structlog.contextvars
 
 
 def configure_structlog() -> None:
     structlog.configure(
         processors=[
+            structlog.contextvars.merge_contextvars,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.stdlib.add_log_level,
             structlog.processors.JSONRenderer(),
