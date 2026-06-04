@@ -11,7 +11,13 @@ _logger = logging.getLogger(__name__)
 
 
 def configure_telemetry() -> None:
-    # TODO: implement (hint: Resource.create({SERVICE_NAME: "payment-ledger-api"}))
-    # TODO: implement (hint: OTLPSpanExporter(endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")))
-    # TODO: implement (hint: TracerProvider(resource=...) → add_span_processor(BatchSpanProcessor(...)) → trace.set_tracer_provider(...))
-    pass
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    resource = Resource.create({SERVICE_NAME: "payment-ledger-api"})
+
+    provider = TracerProvider(resource=resource)
+    exporter = OTLPSpanExporter(endpoint=endpoint)
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+
+    trace.set_tracer_provider(provider)
+    _logger.info("OpenTelemetry configured, exporting to %s", endpoint)
