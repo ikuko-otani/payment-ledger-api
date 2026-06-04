@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_structlog()
     configure_telemetry()
     FastAPIInstrumentor().instrument_app(app)
-    SQLAlchemyInstrumentor().instrument(engine=engine)
+    SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
     yield
 
 
