@@ -1,13 +1,13 @@
-import logging
 import os
 
+import structlog
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-_logger = logging.getLogger(__name__)
+_logger = structlog.get_logger(__name__)
 
 
 def configure_telemetry() -> None:
@@ -20,4 +20,4 @@ def configure_telemetry() -> None:
     provider.add_span_processor(BatchSpanProcessor(exporter))
 
     trace.set_tracer_provider(provider)
-    _logger.info("OpenTelemetry configured, exporting to %s", endpoint)
+    _logger.info("OpenTelemetry configured", endpoint=endpoint)
