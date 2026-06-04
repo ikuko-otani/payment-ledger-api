@@ -17,8 +17,8 @@ from app.middleware.logging import RequestLoggingMiddleware
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_structlog()
     configure_telemetry()
-    # TODO: implement (hint: FastAPIInstrumentor().instrument_app(app))
-    # TODO: implement (hint: SQLAlchemyInstrumentor().instrument(engine=engine))
+    FastAPIInstrumentor().instrument_app(app)
+    SQLAlchemyInstrumentor().instrument(engine=engine)
     yield
 
 
