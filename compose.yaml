@@ -10,6 +10,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     # 💡 Mount local source into the container so code changes are reflected
     #    without rebuilding the image. .venv is excluded to avoid overwriting
     #    the packages installed during docker build.
@@ -43,6 +45,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports:
+      - "4317:4317" # OTLP gRPC (exporter target)
+      - "16686:16686" # Jaeger UI
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
 
 volumes:
   pgdata:
