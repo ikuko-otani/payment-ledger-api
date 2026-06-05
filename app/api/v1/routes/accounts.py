@@ -74,16 +74,9 @@ async def get_account_balance(
     _current_user: AuditorOrAdminUser,
 ) -> BalanceResponse:
     cache_key = f"balance:{id}:{as_of.date()}"
-    # 🔧 Fill-in: Cache-Aside (Lazy Loading) pattern
-    # TODO: step 1 — try cache hit
-    #   cached = await redis.get(cache_key)
-    #   if cached is not None:
-    #       return BalanceResponse(balance=int(cached), as_of=as_of)
-    # TODO: step 2 — cache miss: query DB
-    #   balance = await calculate_balance(db, id, as_of)
-    # TODO: step 3 — store result in Redis with TTL
-    #   await redis.set(cache_key, str(balance), ex=settings.balance_cache_ttl_seconds)
-    # TODO: step 4 — return
-    #   return BalanceResponse(balance=balance, as_of=as_of)
+    cached = await redis.get(cache_key)
+    if cached is not None:
+        return BalanceResponse(balance=int(cached), as_of=as_of)
     balance = await calculate_balance(db, id, as_of)
+    await redis.set(cache_key, str(balance), ex=settings.balance_cache_ttl_seconds)
     return BalanceResponse(balance=balance, as_of=as_of)
