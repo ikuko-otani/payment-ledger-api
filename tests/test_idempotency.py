@@ -18,11 +18,7 @@ from app.models.account import AccountType
 # Fixtures
 # ---------------------------------------------------------------------------
 
-
-@pytest.fixture(scope="session")
-def redis_container():
-    with RedisContainer("redis:7-alpine") as rc:
-        yield rc
+# redis_container is defined in conftest.py (session-scoped, shared across all test files)
 
 
 @pytest_asyncio.fixture()

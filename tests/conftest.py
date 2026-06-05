@@ -9,6 +9,7 @@ from contextlib import AsyncExitStack
 import pytest
 import pytest_asyncio
 from alembic.config import Config as AlembicConfig
+from testcontainers.redis import RedisContainer
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -36,6 +37,13 @@ def postgres_container() -> Generator[PostgresContainer, None, None]:
     """Start one PostgreSQL container for the whole test session."""
     with PostgresContainer("postgres:16-alpine") as pg:
         yield pg
+
+
+@pytest.fixture(scope="session")
+def redis_container() -> Generator[RedisContainer, None, None]:
+    """Start one Redis container for the whole test session (shared by all test files)."""
+    with RedisContainer("redis:7-alpine") as rc:
+        yield rc
 
 
 @pytest.fixture(scope="session")

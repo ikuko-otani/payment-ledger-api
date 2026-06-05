@@ -10,6 +10,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import RedisDep
+from app.core.config import settings
 from app.core.deps import AdminUser, AuditorOrAdminUser
 from app.db.session import get_db
 from app.models.account import Account
@@ -65,7 +67,23 @@ async def create_account(
 
 @router.get("/{id}/balance", response_model=BalanceResponse)
 async def get_account_balance(
-    id: uuid.UUID, as_of: datetime, db: DbDep, _current_user: AuditorOrAdminUser
+    id: uuid.UUID,
+    as_of: datetime,
+    db: DbDep,
+    redis: RedisDep,
+    _current_user: AuditorOrAdminUser,
 ) -> BalanceResponse:
+    cache_key = f"balance:{id}:{as_of.date()}"
+    # 🔧 Fill-in: Cache-Aside (Lazy Loading) pattern
+    # TODO: step 1 — try cache hit
+    #   cached = await redis.get(cache_key)
+    #   if cached is not None:
+    #       return BalanceResponse(balance=int(cached), as_of=as_of)
+    # TODO: step 2 — cache miss: query DB
+    #   balance = await calculate_balance(db, id, as_of)
+    # TODO: step 3 — store result in Redis with TTL
+    #   await redis.set(cache_key, str(balance), ex=settings.balance_cache_ttl_seconds)
+    # TODO: step 4 — return
+    #   return BalanceResponse(balance=balance, as_of=as_of)
     balance = await calculate_balance(db, id, as_of)
     return BalanceResponse(balance=balance, as_of=as_of)

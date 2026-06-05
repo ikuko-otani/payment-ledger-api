@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int
     debug: bool = False
     redis_url: str = "redis://redis:6379"
+    balance_cache_ttl_seconds: int = 60  # ✍️ TTL for balance cache keys (seconds)
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
