@@ -49,13 +49,61 @@ async def test_balance_cache_miss_stores_value_in_redis(
     cached_client: AsyncClient,
     redis_client: aioredis.Redis,  # type: ignore[type-arg]
 ) -> None:
-    # 🔧 Fill-in: verify that a cache miss queries the DB and stores the result in Redis
-    # TODO: step 1 — POST /api/v1/accounts to create cash (asset) and revenue accounts
-    # TODO: step 2 — POST /api/v1/transactions (debit cash 1000, credit revenue 1000)
-    # TODO: step 3 — GET /api/v1/accounts/{cash_id}/balance?as_of=2026-01-31T00:00:00
-    # TODO: step 4 — assert response status 200 and balance == 1000
-    # TODO: step 5 — assert await redis_client.get(f"balance:{cash_id}:2026-01-31") == "1000"
-    pass
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1101",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "4001",
+            "name": "Revenue",
+            "account_type": "revenue",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    revenue_id = resp.json()["id"]
+
+    await cached_client.post(
+        "/api/v1/transactions",
+        json={
+            "description": "cache miss test",
+            "transaction_date": "2026-01-10",
+            "entries": [
+                {
+                    "account_id": cash_id,
+                    "direction": "debit",
+                    "amount": 1000,
+                    "currency": "EUR",
+                },
+                {
+                    "account_id": revenue_id,
+                    "direction": "credit",
+                    "amount": 1000,
+                    "currency": "EUR",
+                },
+            ],
+        },
+    )
+
+    resp = await cached_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2026-01-31T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["balance"] == 1000
+
+    cached = await redis_client.get(f"balance:{cash_id}:2026-01-31")
+    assert cached == "1000"
 
 
 @pytest.mark.asyncio
@@ -63,12 +111,26 @@ async def test_balance_cache_hit_returns_cached_value(
     cached_client: AsyncClient,
     redis_client: aioredis.Redis,  # type: ignore[type-arg]
 ) -> None:
-    # 🔧 Fill-in: verify that a pre-seeded Redis value is returned without hitting the DB
-    # TODO: step 1 — POST /api/v1/accounts to create a cash account (no transactions)
-    # TODO: step 2 — directly seed Redis: await redis_client.set(f"balance:{cash_id}:2026-01-31", "9999", ex=60)
-    # TODO: step 3 — GET /api/v1/accounts/{cash_id}/balance?as_of=2026-01-31T00:00:00
-    # TODO: step 4 — assert balance == 9999 (proves cache hit; DB has no transactions so would return 0)
-    pass
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1101",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    await redis_client.set(f"balance:{cash_id}:2026-01-31", "9999", ex=60)
+
+    resp = await cached_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2026-01-31T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["balance"] == 9999
 
 
 @pytest.mark.asyncio
@@ -76,10 +138,57 @@ async def test_post_transaction_invalidates_balance_cache(
     cached_client: AsyncClient,
     redis_client: aioredis.Redis,  # type: ignore[type-arg]
 ) -> None:
-    # 🔧 Fill-in: verify that POST /transactions deletes the balance cache key
-    # TODO: step 1 — POST /api/v1/accounts to create cash and revenue accounts
-    # TODO: step 2 — GET /api/v1/accounts/{cash_id}/balance to populate the cache
-    # TODO: step 3 — assert the cache key now exists in Redis
-    # TODO: step 4 — POST /api/v1/transactions (debit cash, credit revenue)
-    # TODO: step 5 — assert await redis_client.get(f"balance:{cash_id}:...") is None
-    pass
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1101",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "4001",
+            "name": "Revenue",
+            "account_type": "revenue",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    revenue_id = resp.json()["id"]
+
+    await cached_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2026-01-31T00:00:00"},
+    )
+    assert await redis_client.get(f"balance:{cash_id}:2026-01-31") is not None
+
+    await cached_client.post(
+        "/api/v1/transactions",
+        json={
+            "description": "invalidation test",
+            "transaction_date": "2026-01-10",
+            "entries": [
+                {
+                    "account_id": cash_id,
+                    "direction": "debit",
+                    "amount": 500,
+                    "currency": "EUR",
+                },
+                {
+                    "account_id": revenue_id,
+                    "direction": "credit",
+                    "amount": 500,
+                    "currency": "EUR",
+                },
+            ],
+        },
+    )
+
+    assert await redis_client.get(f"balance:{cash_id}:2026-01-31") is None
+    assert await redis_client.get(f"balance:{revenue_id}:2026-01-31") is None
