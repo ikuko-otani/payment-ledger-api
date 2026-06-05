@@ -23,7 +23,9 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("", response_model=list[TransactionRead])
-async def list_transactions(db: DbDep, _current_user: AuditorOrAdminUser) -> list[Transaction]:
+async def list_transactions(
+    db: DbDep, _current_user: AuditorOrAdminUser
+) -> list[Transaction]:
     result = await db.execute(
         # 💡 selectinload: Transaction を取得するとき entries も一緒にロードする。
         #    N+1 問題を避けるための eager loading。
@@ -41,11 +43,9 @@ async def post_transaction(
     current_user: AdminUser,
 ) -> Transaction:
     transaction = await create_transaction(db, payload, current_user.id)
-    # 🔧 Fill-in: invalidate balance cache for all accounts in this transaction
-    # hint: both debit and credit accounts must be invalidated
-    # TODO: for entry in payload.entries:
-    #           pattern = f"balance:{entry.account_id}:*"
-    #           keys = await redis.keys(pattern)
-    #           if keys:
-    #               await redis.delete(*keys)
+    for entry in payload.entries:
+        pattern = f"balance:{entry.account_id}:*"
+        keys = await redis.keys(pattern)
+        if keys:
+            await redis.delete(*keys)
     return transaction
