@@ -64,3 +64,33 @@ This project's design (compute balance from journal entries on demand, cache the
 - ADR: `docs/adr/001-redis-for-idempotency-key.md`
 - Cache invalidation implementation: `app/api/v1/routes/transactions.py`
 - Cache-Aside pattern: `app/api/v1/routes/accounts.py`
+
+---
+
+## Key Takeaways
+
+### What did I learn?
+
+- I learned how to implement the **Cache-Aside (Lazy Loading) pattern** end-to-end: cache key design with `as_of_date`, TTL via environment variable, `str`/`int` round-trip serialization, and cache invalidation on write.
+- I learned that **FastAPI `dependency_overrides` completely bypasses the original function** — the overridden function is never called. This means a bug inside a dependency function (like the `decode_response` typo) is invisible to tests that override that dependency.
+- I learned the difference between **Docker service names** (only resolvable inside the Docker network) and **`localhost` with port mapping** (accessible from the host), and why `uv run pytest` on the host cannot reach `redis://redis:6379`.
+- I learned how to **refactor shared test fixtures** using a helper function (`_make_redis_override`) modelled after the existing `_make_db_override` pattern, and why `session`-scoped container fixtures belong in `conftest.py` rather than individual test files.
+- I learned the distinction between the legacy **nightly batch** balance update pattern (driven by regulatory/mainframe constraints) and the modern **CQRS + event-driven** approach used by fintechs like Mollie and Revolut.
+
+### What would I do differently?
+
+- I would extract `_make_redis_override` from the start, rather than adding it as a refactor after the initial implementation caused test failures across existing tests. Planning which fixtures need a new dependency before writing any code would have saved a round of debugging.
+- I would run a quick smoke test (`curl` or a direct Python call) on the dependency function itself early, rather than waiting until the full manual verification step. The `decode_response` typo would have been caught much sooner.
+
+### What surprised me?
+
+- It surprised me that **all cache tests passed even though `get_redis_client()` had a typo** that would crash at runtime. The dependency override pattern is powerful, but it means the production code path for the dependency itself is untested unless you call the function directly.
+- The structural issue in `authenticated_client` — where `_redis` was created inside `_factory` and therefore could never be closed — was a subtle lifecycle bug that only became visible when I thought carefully about the fixture's teardown flow.
+
+### What is worth remembering for future goals?
+
+- **`if cached is not None:` not `if cached:`** — a cached value of `"0"` is falsy in Python, so the shorter form silently skips the cache hit for zero balances.
+- **Cache key must include all query parameters** — `balance:{account_id}` alone is wrong; `balance:{account_id}:{as_of_date}` is correct. Missing a parameter means different queries share the same key and return stale results.
+- **Invalidate both debit and credit accounts** — a transaction touches two accounts. Only invalidating one leaves the other with a stale balance.
+- **`session`-scoped container fixtures belong in `conftest.py`** — if two test files both define a `session`-scoped `redis_container`, pytest starts two containers. One shared fixture in `conftest.py` is the correct design.
+- **`decode_responses=True` (plural)** — the `redis.asyncio` parameter is `decode_responses`, not `decode_response`. This typo produces a `TypeError` at runtime but is invisible in tests that use dependency overrides.
