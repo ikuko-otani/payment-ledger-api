@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import RedisDep
 from app.core.deps import AdminUser, AuditorOrAdminUser
 from app.db.session import get_db
 from app.dependencies.idempotency import IdempotencyDep
@@ -35,7 +36,14 @@ async def list_transactions(db: DbDep, _current_user: AuditorOrAdminUser) -> lis
 async def post_transaction(
     payload: TransactionCreate,
     db: DbDep,
+    redis: RedisDep,
     _: IdempotencyDep,
     current_user: AdminUser,
 ) -> Transaction:
-    return await create_transaction(db, payload, current_user.id)
+    transaction = await create_transaction(db, payload, current_user.id)
+    for entry in payload.entries:
+        pattern = f"balance:{entry.account_id}:*"
+        keys = await redis.keys(pattern)
+        if keys:
+            await redis.delete(*keys)
+    return transaction

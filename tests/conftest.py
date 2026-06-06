@@ -8,6 +8,7 @@ from contextlib import AsyncExitStack
 
 import pytest
 import pytest_asyncio
+import redis.asyncio as aioredis
 from alembic.config import Config as AlembicConfig
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -18,8 +19,10 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 from alembic import command as alembic_command
+from app.core.cache import get_redis_client
 from app.core.deps import get_current_user
 from app.core.security import get_password_hash
 from app.db.session import get_db
@@ -36,6 +39,13 @@ def postgres_container() -> Generator[PostgresContainer, None, None]:
     """Start one PostgreSQL container for the whole test session."""
     with PostgresContainer("postgres:16-alpine") as pg:
         yield pg
+
+
+@pytest.fixture(scope="session")
+def redis_container() -> Generator[RedisContainer, None, None]:
+    """Start one Redis container for the whole test session (shared by all test files)."""
+    with RedisContainer("redis:7-alpine") as rc:
+        yield rc
 
 
 @pytest.fixture(scope="session")
@@ -112,6 +122,7 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture()
 async def async_client(
     engine: AsyncEngine,
+    redis_container: RedisContainer,
 ) -> AsyncGenerator[AsyncClient, None]:
     """AsyncClient with DB dependency overridden to use testcontainer session.
 
@@ -160,13 +171,17 @@ async def async_client(
             role=UserRole.ADMIN,
         )
 
+    _redis, override_get_redis_client = _make_redis_override(redis_container)
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
     fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
+    fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
 
     transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
+    await _redis.aclose()
     fastapi_app.dependency_overrides.clear()
 
 
@@ -239,6 +254,21 @@ def _make_db_override(
     return override_get_db
 
 
+def _make_redis_override(
+    redis_container: RedisContainer,
+) -> tuple[aioredis.Redis, Callable]:  # type: ignore[type-arg]
+    host = redis_container.get_container_host_ip()
+    port = redis_container.get_exposed_port(6379)
+    client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
+        f"redis://{host}:{port}", encoding="utf-8", decode_responses=True
+    )
+
+    async def override() -> AsyncGenerator[aioredis.Redis, None]:  # type: ignore[type-arg]
+        yield client
+
+    return client, override
+
+
 @pytest_asyncio.fixture()
 async def admin_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     """Seed an admin user into the test DB and yield a valid JWT access token."""
@@ -284,6 +314,7 @@ async def auditor_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
 @pytest_asyncio.fixture()
 async def authenticated_client(
     engine: AsyncEngine,
+    redis_container: RedisContainer,
 ) -> AsyncGenerator[Callable[[str], AsyncClient], None]:
     """Factory fixture: yields a coroutine factory that creates authenticated AsyncClients.
 
@@ -294,6 +325,7 @@ async def authenticated_client(
             resp = await client.post("/api/v1/transactions", ...)
     """
     stack = AsyncExitStack()
+    _redis, override_get_redis_client = _make_redis_override(redis_container)
 
     async def _factory(role: str) -> AsyncClient:
         email = f"{role}@fixture.test"
@@ -303,6 +335,8 @@ async def authenticated_client(
         await _seed_user(engine, email, password, role_enum)
 
         fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+        fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
+
         transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
         client = await stack.enter_async_context(
             AsyncClient(transport=transport, base_url="http://test")
@@ -317,12 +351,14 @@ async def authenticated_client(
 
     yield _factory  # type: ignore[misc]
     await stack.aclose()
+    await _redis.aclose()
     fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture()
 async def auditor_client(
     engine: AsyncEngine,
+    redis_container: RedisContainer,
 ) -> AsyncGenerator[AsyncClient, None]:
     """Token-based AsyncClient with AUDITOR role (replaces the override-based version)."""
     email = "auditor@fixture.test"
@@ -330,7 +366,11 @@ async def auditor_client(
 
     await _seed_user(engine, email, password, UserRole.AUDITOR)
 
+    _redis, override_get_redis_client = _make_redis_override(redis_container)
+
     fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
+    fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
+
     transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
@@ -341,4 +381,5 @@ async def auditor_client(
         client.headers.update({"Authorization": f"Bearer {token}"})
         yield client
 
+    await _redis.aclose()
     fastapi_app.dependency_overrides.clear()
