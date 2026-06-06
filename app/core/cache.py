@@ -13,7 +13,7 @@ from app.core.config import settings
 
 async def get_redis_client() -> AsyncGenerator[aioredis.Redis, None]:  # type: ignore[type-arg]
     client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
-        settings.redis_url, encoding="utf-8", decode_response=True
+        settings.redis_url, encoding="utf-8", decode_responses=True
     )
     try:
         yield client
