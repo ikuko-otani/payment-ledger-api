@@ -57,7 +57,9 @@ class Transaction(Base):
     )
     # column name "metadata" in DB
     # metadata_ in Python to avoid conflict with SQLAlchemy's internal MetaData object
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True, default=None)
+    metadata_: Mapped[dict | None] = mapped_column(
+        "metadata", JSON, nullable=True, default=None
+    )
 
     entries: Mapped[list[Entry]] = relationship(
         back_populates="transaction",

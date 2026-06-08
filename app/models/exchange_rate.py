@@ -26,11 +26,17 @@ class ExchangeRate(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    from_currency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("currencies.id"), nullable=False)
-    to_currency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("currencies.id"), nullable=False)
+    from_currency_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("currencies.id"), nullable=False
+    )
+    to_currency_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("currencies.id"), nullable=False
+    )
     rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
-    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_by_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

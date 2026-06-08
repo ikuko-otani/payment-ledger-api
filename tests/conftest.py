@@ -55,9 +55,9 @@ def migrated_database_urls(
     """Run Alembic once and provide sync/async DB URLs."""
     raw_url = postgres_container.get_connection_url()
 
-    sync_url = raw_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1).replace(
-        "postgresql://", "postgresql+psycopg://", 1
-    )
+    sync_url = raw_url.replace(
+        "postgresql+psycopg2://", "postgresql+psycopg://", 1
+    ).replace("postgresql://", "postgresql+psycopg://", 1)
     async_url = sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
 
     cfg = AlembicConfig("alembic.ini")
@@ -225,7 +225,9 @@ async def _seed_user(
     role: UserRole,
 ) -> None:
     """Insert a User row directly into the test DB with a hashed password."""
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
     async with session_factory() as session:
         user = User(
             email=email,
@@ -240,7 +242,9 @@ def _make_db_override(
     engine: AsyncEngine,
 ) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
     """Return an override_get_db callable suitable for dependency_overrides[get_db]."""
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as session:
