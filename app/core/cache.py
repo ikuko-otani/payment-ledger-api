@@ -11,8 +11,8 @@ from fastapi import Depends
 from app.core.config import settings
 
 
-async def get_redis_client() -> AsyncGenerator[aioredis.Redis, None]:  # type: ignore[type-arg]
-    client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
+async def get_redis_client() -> AsyncGenerator[aioredis.Redis, None]:
+    client: aioredis.Redis = aioredis.from_url(
         settings.redis_url, encoding="utf-8", decode_responses=True
     )
     try:
@@ -21,4 +21,4 @@ async def get_redis_client() -> AsyncGenerator[aioredis.Redis, None]:  # type: i
         await client.aclose()
 
 
-RedisDep = Annotated[aioredis.Redis, Depends(get_redis_client)]  # type: ignore[type-arg]
+RedisDep = Annotated[aioredis.Redis, Depends(get_redis_client)]
