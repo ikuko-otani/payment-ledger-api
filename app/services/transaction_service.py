@@ -11,7 +11,7 @@ PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -50,7 +50,9 @@ async def _get_converted_amount_usd(
         return amount
 
     # Resolve from_currency UUID
-    from_result = await db.execute(select(Currency).where(Currency.code == currency_code))
+    from_result = await db.execute(
+        select(Currency).where(Currency.code == currency_code)
+    )
     from_currency = from_result.scalar_one_or_none()
     if from_currency is None:
         raise HTTPException(
@@ -134,7 +136,9 @@ async def create_transaction(
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
-    credit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.CREDIT)
+    credit_sum = sum(
+        e.amount for e in payload.entries if e.direction == Direction.CREDIT
+    )
 
     if debit_sum != credit_sum:
         raise HTTPException(
@@ -149,7 +153,7 @@ async def create_transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
         status=TransactionStatus.POSTED,
-        posted_at=datetime.now(timezone.utc),
+        posted_at=datetime.now(UTC),
     )
     db.add(transaction)
     await db.flush()
@@ -173,7 +177,9 @@ async def create_transaction(
             currency=entry.currency,
             converted_amount_usd=converted_amount,
         )
-        for entry, converted_amount in zip(payload.entries, converted_amounts)
+        for entry, converted_amount in zip(
+            payload.entries, converted_amounts, strict=True
+        )
     ]
     db.add_all(entries)
     await db.flush()

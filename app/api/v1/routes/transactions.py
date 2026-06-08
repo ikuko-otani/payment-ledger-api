@@ -23,7 +23,9 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("", response_model=list[TransactionRead])
-async def list_transactions(db: DbDep, _current_user: AuditorOrAdminUser) -> list[Transaction]:
+async def list_transactions(
+    db: DbDep, _current_user: AuditorOrAdminUser
+) -> list[Transaction]:
     result = await db.execute(
         # 💡 selectinload: Transaction を取得するとき entries も一緒にロードする。
         #    N+1 問題を避けるための eager loading。

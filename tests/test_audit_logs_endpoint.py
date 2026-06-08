@@ -13,7 +13,12 @@ async def test_get_audit_logs_admin_returns_200_and_list(
     """Admin can access GET /audit-logs and receives a JSON list."""
     await async_client.post(
         "/api/v1/accounts",
-        json={"code": "1200", "name": "Bank", "account_type": "asset", "currency": "USD"},
+        json={
+            "code": "1200",
+            "name": "Bank",
+            "account_type": "asset",
+            "currency": "USD",
+        },
     )
 
     resp = await async_client.get("/api/v1/audit-logs")
@@ -39,7 +44,12 @@ async def test_get_audit_logs_entity_type_filter(
     """entity_type filter restricts results to matching entity types only."""
     await async_client.post(
         "/api/v1/accounts",
-        json={"code": "1201", "name": "Savings", "account_type": "asset", "currency": "USD"},
+        json={
+            "code": "1201",
+            "name": "Savings",
+            "account_type": "asset",
+            "currency": "USD",
+        },
     )
 
     resp = await async_client.get("/api/v1/audit-logs?entity_type=account")

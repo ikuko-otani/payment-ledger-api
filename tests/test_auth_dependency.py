@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 from httpx import AsyncClient
 
@@ -12,7 +14,9 @@ async def _register_and_login(
     password: str = "secret123",
 ) -> str:
     """Register a user and return a valid JWT access token."""
-    await async_client.post("/api/v1/users", json={"email": email, "password": password})
+    await async_client.post(
+        "/api/v1/users", json={"email": email, "password": password}
+    )
     response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
@@ -22,7 +26,7 @@ async def _register_and_login(
 
 def _expired_token() -> str:
     """Return a syntactically valid but expired JWT."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from jose import jwt as jose_jwt
 
@@ -30,7 +34,7 @@ def _expired_token() -> str:
 
     payload = {
         "sub": "00000000-0000-0000-0000-000000000000",
-        "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+        "exp": datetime.now(UTC) - timedelta(minutes=1),
     }
     return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
@@ -54,7 +58,7 @@ def _invalid_signature_token() -> str:
 
 def _nonexistent_user_token() -> str:
     """Return a JWT with a random UUID sub that does not exist in the DB."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     from uuid import uuid4
 
     from jose import jwt as jose_jwt
@@ -63,7 +67,7 @@ def _nonexistent_user_token() -> str:
 
     payload = {
         "sub": str(uuid4()),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+        "exp": datetime.now(UTC) + timedelta(minutes=30),
     }
     return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 

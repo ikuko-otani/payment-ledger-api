@@ -86,11 +86,15 @@ async def test_same_idempotency_key_returns_409_on_second_request(
     }
     headers = {"Idempotency-Key": key}
 
-    r1 = await idempotent_client.post("/api/v1/transactions", json=payload, headers=headers)
+    r1 = await idempotent_client.post(
+        "/api/v1/transactions", json=payload, headers=headers
+    )
     print(r1.json())
     assert r1.status_code == 201
 
-    r2 = await idempotent_client.post("/api/v1/transactions", json=payload, headers=headers)
+    r2 = await idempotent_client.post(
+        "/api/v1/transactions", json=payload, headers=headers
+    )
     assert r2.status_code == 409
     assert "Idempotency-Key" in r2.json()["detail"]
 

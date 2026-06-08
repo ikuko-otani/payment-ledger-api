@@ -25,11 +25,15 @@ async def calculate_balance(
     result = await db.execute(
         select(
             func.coalesce(
-                func.sum(case((Entry.direction == Direction.DEBIT, Entry.amount), else_=0)),
+                func.sum(
+                    case((Entry.direction == Direction.DEBIT, Entry.amount), else_=0)
+                ),
                 0,
             )
             - func.coalesce(
-                func.sum(case((Entry.direction == Direction.CREDIT, Entry.amount), else_=0)),
+                func.sum(
+                    case((Entry.direction == Direction.CREDIT, Entry.amount), else_=0)
+                ),
                 0,
             )
         )

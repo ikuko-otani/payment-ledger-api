@@ -28,13 +28,15 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
         sub: str | None = payload.get("sub")
         if sub is None:
             raise credentials_exception
         user_id = uuid.UUID(sub)
-    except (JWTError, ValueError):
-        raise credentials_exception
+    except (JWTError, ValueError) as e:
+        raise credentials_exception from e
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     if user is None:
@@ -51,7 +53,9 @@ async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
+        )
     return current_user
 
 

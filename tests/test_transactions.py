@@ -42,7 +42,9 @@ async def test_create_balanced_transaction_persists_rows(
     db_session: AsyncSession,
 ) -> None:
     debit = await _create_account(db_session, "Cash", AccountType.ASSET, code="1100")
-    credit = await _create_account(db_session, "Revenue", AccountType.REVENUE, code="4000")
+    credit = await _create_account(
+        db_session, "Revenue", AccountType.REVENUE, code="4000"
+    )
 
     test_user_id = uuid.uuid4()
     db_session.add(
@@ -78,7 +80,9 @@ async def test_create_balanced_transaction_persists_rows(
     tx = await create_transaction(db_session, payload, user_id=test_user_id)
     await db_session.commit()
 
-    result = await db_session.execute(select(Transaction).where(Transaction.id == tx.id))
+    result = await db_session.execute(
+        select(Transaction).where(Transaction.id == tx.id)
+    )
     saved = result.scalar_one()
 
     assert saved.description == "Balanced"
@@ -91,8 +95,12 @@ async def test_create_balanced_transaction_persists_rows(
 async def test_unbalanced_transaction_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash-Unbal", AccountType.ASSET, code="1101")
-    credit = await _create_account(db_session, "Revenue-Unbal", AccountType.REVENUE, code="4001")
+    debit = await _create_account(
+        db_session, "Cash-Unbal", AccountType.ASSET, code="1101"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-Unbal", AccountType.REVENUE, code="4001"
+    )
 
     payload = TransactionCreate(
         description="Unbalanced",
@@ -141,8 +149,12 @@ async def test_transaction_create_requires_at_least_two_entries() -> None:
 async def test_transaction_response_shape_like_domain_object(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash-Resp", AccountType.ASSET, code="1102")
-    credit = await _create_account(db_session, "Revenue-Resp", AccountType.REVENUE, code="4002")
+    debit = await _create_account(
+        db_session, "Cash-Resp", AccountType.ASSET, code="1102"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-Resp", AccountType.REVENUE, code="4002"
+    )
 
     payload = TransactionCreate(
         description="Response shape",
@@ -257,8 +269,12 @@ async def test_unknown_account_id_raises_http_422(
 async def test_all_debit_entries_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash-AD1", AccountType.ASSET, code="1110")
-    debit2 = await _create_account(db_session, "Cash-AD2", AccountType.ASSET, code="1111")
+    debit = await _create_account(
+        db_session, "Cash-AD1", AccountType.ASSET, code="1110"
+    )
+    debit2 = await _create_account(
+        db_session, "Cash-AD2", AccountType.ASSET, code="1111"
+    )
 
     payload = TransactionCreate(
         description="All debit",
@@ -290,8 +306,12 @@ async def test_all_debit_entries_raises_http_422(
 async def test_all_credit_entries_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    credit = await _create_account(db_session, "Revenue-AC1", AccountType.REVENUE, code="4010")
-    credit2 = await _create_account(db_session, "Revenue-AC2", AccountType.REVENUE, code="4011")
+    credit = await _create_account(
+        db_session, "Revenue-AC1", AccountType.REVENUE, code="4010"
+    )
+    credit2 = await _create_account(
+        db_session, "Revenue-AC2", AccountType.REVENUE, code="4011"
+    )
 
     payload = TransactionCreate(
         description="All credit",
@@ -323,8 +343,12 @@ async def test_all_credit_entries_raises_http_422(
 async def test_mixed_currency_entries_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    debit = await _create_account(db_session, "Cash-EUR", AccountType.ASSET, code="1120")
-    credit = await _create_account(db_session, "Revenue-USD", AccountType.REVENUE, code="4020")
+    debit = await _create_account(
+        db_session, "Cash-EUR", AccountType.ASSET, code="1120"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-USD", AccountType.REVENUE, code="4020"
+    )
 
     payload = TransactionCreate(
         description="Mixed currency",

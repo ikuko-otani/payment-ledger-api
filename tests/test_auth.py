@@ -11,7 +11,9 @@ async def _register_user(
     email: str = "auth_user@example.com",
     password: str = "secret123",
 ) -> None:
-    await async_client.post("/api/v1/users", json={"email": email, "password": password})
+    await async_client.post(
+        "/api/v1/users", json={"email": email, "password": password}
+    )
 
 
 @pytest.mark.asyncio

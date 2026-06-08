@@ -37,11 +37,15 @@ asyncio_mode = "auto"
 
 [tool.ruff]
 target-version = "py312"
-line-length = 100
+line-length = 88
 exclude = ["alembic/"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "B008", "UP042"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.mypy]
 python_version = "3.12"
