@@ -34,5 +34,5 @@ app.include_router(api_router)
 
 
 @app.get("/health", tags=["system"])
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "ok"}
