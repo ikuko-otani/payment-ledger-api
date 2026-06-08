@@ -432,6 +432,152 @@ requirement.
 
 ---
 
+## 9. Observability & Caching Design (S5)
+
+> Added in S5 after implementing structlog (JSON logging), OpenTelemetry +
+> Jaeger (distributed tracing), and a Redis-backed Cache-Aside layer for
+> `GET /accounts/{id}/balance`. As with Section 7, these are written as
+> interview-ready ADR entries: decision, rationale, and trade-offs.
+
+### 9.1 Why async SQLAlchemy over sync
+
+**Decision**: Use SQLAlchemy 2.0's async engine with the `asyncpg` driver and
+`AsyncSession` throughout the service layer (`app/services/*.py`), rather than
+the classic synchronous `Session` + `psycopg2` combination.
+
+**What was rejected**: Sync SQLAlchemy, relying on FastAPI's automatic
+`run_in_threadpool` wrapping for sync route handlers and dependencies.
+
+**Rationale**:
+- *Consistency with FastAPI's concurrency model*: FastAPI is built on Starlette's
+  ASGI event loop. A sync DB call inside an `async def` route blocks that loop
+  for every other in-flight request; FastAPI works around this by offloading
+  sync calls to a thread pool, but that reintroduces a thread-per-request cost
+  that async was supposed to remove. Using `AsyncSession` end-to-end keeps the
+  whole request path on a single event loop with no thread-pool indirection.
+- *Throughput under I/O-bound load*: this API spends most of its time waiting
+  on PostgreSQL and Redis, not computing. While one request `await`s a query,
+  the event loop is free to advance other requests. (Compare: PHP-FPM allocates
+  one OS process per request — a process blocked on a DB query is a process
+  that cannot serve anyone else until the query returns.)
+- *Driver-level support*: `asyncpg` is a mature, high-performance async
+  PostgreSQL driver with native `async`/`await` support, making the async
+  SQLAlchemy path a first-class option rather than a compatibility shim.
+
+**Trade-off — what async gives up**:
+- *Cognitive overhead*: every DB-touching function must be `async def` and
+  every call must be `await`ed; forgetting one produces confusing runtime
+  errors rather than type errors.
+- *Lazy-loading caveats*: SQLAlchemy's classic lazy-load pattern
+  (`account.entries` triggering an implicit query) requires a greenlet bridge
+  in async mode and fails with `MissingGreenlet` if accessed outside an
+  awaited context (see `docs/troubleshooting/sqlalchemy-missing-greenlet-lazy-load.md`).
+  This pushes the team toward explicit eager loading (`selectinload`), which is
+  arguably better practice anyway but is an extra thing to learn.
+- *Smaller ecosystem*: fewer async-native extensions exist compared to the
+  mature sync SQLAlchemy ecosystem (e.g. some Alembic autogenerate workflows
+  still assume a sync engine, requiring a small sync/async bridge).
+
+### 9.2 Observability stack (structlog + OpenTelemetry + Jaeger)
+
+**Decision**: Combine three tools, each responsible for one observability
+pillar: **structlog** for JSON-structured application logs, **OpenTelemetry**
+(OTel) for distributed-tracing instrumentation, and **Jaeger** as the trace
+storage/visualisation backend. The bridge between logs and traces is the
+`trace_id`: `app/middleware/logging.py` reads the active OTel span's trace ID
+and binds it into every structlog entry via `structlog.contextvars`.
+
+**What was rejected / considered**:
+- *Plain stdlib `logging`*: produces unstructured text lines that are hard to
+  query in a log aggregator (Loki, Datadog, CloudWatch Logs Insights all expect
+  structured fields).
+- *Tracing-only (no structured logs)*: traces show *where* time was spent
+  across a request, but not *why* a specific request failed (e.g. validation
+  error details, business-rule rejections).
+- *Logs-only (no tracing)*: logs alone cannot answer "why was this single
+  request slow?" across multiple internal calls — you'd need to manually
+  correlate timestamps across log lines.
+
+**Rationale**:
+- *Pivot in both directions*: a slow trace in the Jaeger UI shows the
+  `trace_id`; pasting that into the log aggregator surfaces every structured
+  log line for that exact request — method, path, status code, latency, and
+  any business-level fields the service layer chose to log. Conversely, an
+  error log line carries the `trace_id`, so you can jump straight to the
+  Jaeger trace and see which downstream call (DB query, Redis lookup) was slow
+  or failed.
+- *JSON logs are machine-first*: structlog emits one JSON object per event, so
+  every field (`request_id`, `trace_id`, `latency_ms`, …) is queryable without
+  regex parsing — a direct upgrade over grep-based log archaeology.
+- *Jaeger as the de facto OSS trace backend*: it speaks the OpenTelemetry
+  protocol natively, ships as a single Docker Compose service, and its UI
+  (waterfall view of spans) is immediately legible without custom dashboards.
+
+**Trade-off**:
+- *Operational surface area*: three tools means three things that can
+  misconfigure. The most subtle failure mode encountered was instrumenting
+  OTel at the wrong point in the FastAPI lifespan, which silently produced
+  `trace_id = "00000000000000000000000000000000"` (32 zeros — OTel's
+  `INVALID_SPAN` sentinel) instead of raising an error (see
+  `docs/learning-notes/s5-3-otel-fastapi-instrumentation.md`). The fix was to
+  call `instrument_app(app)` before the app starts serving requests, not
+  inside the lifespan callback.
+- *No metrics pillar yet*: latency percentiles and error-rate alerting
+  (Prometheus + Grafana) remain a "what I would add in production" item —
+  logs and traces alone cannot answer "is p99 latency degrading over the last
+  hour?" without manual aggregation.
+
+### 9.3 Caching strategy (Cache-Aside for account balances)
+
+**Decision**: Implement the **Cache-Aside** (lazy-loading) pattern for
+`GET /accounts/{id}/balance`. The service checks Redis first
+(`balance:{account_id}:{as_of_date}`); on a miss it computes the balance from
+PostgreSQL and writes it back to Redis with a TTL; on every transaction write,
+the service explicitly deletes the cache keys for every account touched by
+that transaction (see `app/services/balance.py`, `app/core/cache.py`,
+`tests/test_balance_cache.py`).
+
+**What was rejected / considered**:
+- *Write-through*: update the cache synchronously every time the underlying
+  data changes, so the cache is never stale. This couples every write path to
+  the cache's availability and shape, and wastes cache space on balances that
+  are never subsequently read.
+- *TTL-only invalidation* (no explicit delete on write): simpler to implement,
+  but a balance changed by a transaction would keep returning a stale cached
+  value for up to the TTL window — unacceptable for a financial ledger where
+  "what is my balance right now" must be exact.
+
+**Rationale**:
+- *Correctness over staleness tolerance*: a balance changes if and only if a
+  transaction posts to that account. That is a precisely identifiable event,
+  so explicit invalidation at write time keeps the cache always-correct — no
+  race window, no "eventually consistent" caveat to explain to a user checking
+  their balance.
+- *Optional infrastructure*: Cache-Aside degrades gracefully. If Redis is down,
+  `get_redis_client` simply yields a client that fails to connect, the cache
+  read/write is skipped, and the API still serves correct results directly
+  from PostgreSQL — slower, but never wrong. A write-through design would force
+  a decision about what happens when the cache write fails mid-transaction.
+- *TTL as a safety net, not the primary mechanism*: a TTL is still set (so an
+  orphaned key — e.g. one written just before a crash prevented invalidation —
+  cannot live forever), but it is a backstop, not the invalidation strategy.
+
+**Trade-off**:
+- *Invalidation must enumerate every affected key*: because the cache key
+  includes `as_of_date`, a single account can have many cached entries (one
+  per date queried). `tests/test_balance_cache.py::test_post_transaction_invalidates_balance_cache`
+  demonstrates deleting the keys for both the debited and credited accounts —
+  but a date the cache hasn't seen yet obviously can't be (and doesn't need to
+  be) invalidated. A coarser per-account key (no date component) would make
+  invalidation trivial at the cost of cache hit rate for historical-balance
+  queries.
+- *Cache stampede risk*: if many requests for the same uncached key arrive
+  simultaneously, all of them miss and recompute concurrently. At current MVP
+  traffic this is negligible; a production hardening pass would add a
+  short-lived lock or "request coalescing" around the cache-fill step.
+
+---
+
 ## 6. What I Would Add in Production
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out

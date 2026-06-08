@@ -11,6 +11,11 @@ import pytest_asyncio
 import redis.asyncio as aioredis
 from alembic.config import Config as AlembicConfig
 from httpx import ASGITransport, AsyncClient
+from opentelemetry import trace
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -32,6 +37,26 @@ from app.models.user import User, UserRole
 # Fixed UUID for the mock admin user used in async_client.
 # Must match what override_get_current_user returns so audit_logs FK is satisfied.
 _FIXTURE_ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _configure_test_tracer_provider() -> None:
+    """Wire up a real (in-memory) OTel TracerProvider for the test session.
+
+    Production configures this inside the FastAPI lifespan
+    (app.core.telemetry.configure_telemetry), but ASGITransport-based test
+    clients never trigger ASGI lifespan events — so without this fixture the
+    global TracerProvider stays the OTel no-op default, and every span
+    (and therefore every trace_id bound into structlog by
+    RequestLoggingMiddleware) is the INVALID_SPAN zero placeholder,
+    "00000000000000000000000000000000". trace.set_tracer_provider() may only
+    be called once per process, hence session scope + autouse.
+    """
+    provider = TracerProvider(
+        resource=Resource.create({SERVICE_NAME: "payment-ledger-api-test"})
+    )
+    provider.add_span_processor(SimpleSpanProcessor(InMemorySpanExporter()))
+    trace.set_tracer_provider(provider)
 
 
 @pytest.fixture(scope="session")
