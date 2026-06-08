@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -89,7 +89,7 @@ async def test_balance_single_debit_equals_amount(db_session: AsyncSession) -> N
     )
 
     result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 1000
 
@@ -109,7 +109,7 @@ async def test_balance_excludes_transaction_after_as_of(
     )
 
     result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 1000  # assert only the first tx is reflected (second is excluded)
 
@@ -154,7 +154,7 @@ async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> 
     await db_session.commit()
 
     result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 1000  # assert only POSTED amount is in balance (VOIDED is excluded)
 
@@ -165,7 +165,7 @@ async def test_balance_no_transactions_returns_zero(db_session: AsyncSession) ->
     cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
 
     result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=timezone.utc)
+        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 0
 

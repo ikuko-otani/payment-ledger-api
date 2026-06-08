@@ -11,7 +11,7 @@ PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -149,7 +149,7 @@ async def create_transaction(
         description=payload.description,
         transaction_date=payload.transaction_date,
         status=TransactionStatus.POSTED,
-        posted_at=datetime.now(timezone.utc),
+        posted_at=datetime.now(UTC),
     )
     db.add(transaction)
     await db.flush()

@@ -59,7 +59,7 @@ class Transaction(Base):
     # metadata_ in Python to avoid conflict with SQLAlchemy's internal MetaData object
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True, default=None)
 
-    entries: Mapped[list["Entry"]] = relationship(
+    entries: Mapped[list[Entry]] = relationship(
         back_populates="transaction",
         cascade="save-update, merge",
         # not "delete-orphan": immutable ledger never deletes posted entries
