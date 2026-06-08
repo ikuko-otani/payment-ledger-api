@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,4 +45,4 @@ async def calculate_balance(
             Transaction.status == TransactionStatus.POSTED,
         )
     )
-    return result.scalar_one()
+    return cast(int, result.scalar_one())
