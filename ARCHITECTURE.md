@@ -529,23 +529,52 @@ and binds it into every structlog entry via `structlog.contextvars`.
 
 ### 9.3 Caching strategy (Cache-Aside for account balances)
 
-<!-- TODO: draft in English, ADR style. Cover at least:
-  - Decision: Cache-Aside (lazy loading) pattern for
-    `GET /accounts/{id}/balance`, keyed as `balance:{account_id}:{as_of_date}`
-    in Redis, with explicit invalidation on transaction write
-    (see app/services/balance.py, app/core/cache.py, tests/test_balance_cache.py).
-  - What was rejected / considered: write-through caching (update cache on
-    every write), TTL-only invalidation (no explicit delete on write).
-  - Rationale: balances change only when a transaction posts to the account,
-    so explicit invalidation on write keeps the cache always-correct without
-    relying on a TTL race; Cache-Aside keeps the cache layer optional — if
-    Redis is unavailable, the API still serves correct (if slower) results
-    by falling through to PostgreSQL.
-  - Trade-off: invalidation must enumerate every affected key
-    (one per `as_of` date cached for the account) — a classic "cache
-    invalidation is one of the two hard problems" trade-off; a coarser
-    per-account key would simplify invalidation at the cost of cache hit rate.
--->
+**Decision**: Implement the **Cache-Aside** (lazy-loading) pattern for
+`GET /accounts/{id}/balance`. The service checks Redis first
+(`balance:{account_id}:{as_of_date}`); on a miss it computes the balance from
+PostgreSQL and writes it back to Redis with a TTL; on every transaction write,
+the service explicitly deletes the cache keys for every account touched by
+that transaction (see `app/services/balance.py`, `app/core/cache.py`,
+`tests/test_balance_cache.py`).
+
+**What was rejected / considered**:
+- *Write-through*: update the cache synchronously every time the underlying
+  data changes, so the cache is never stale. This couples every write path to
+  the cache's availability and shape, and wastes cache space on balances that
+  are never subsequently read.
+- *TTL-only invalidation* (no explicit delete on write): simpler to implement,
+  but a balance changed by a transaction would keep returning a stale cached
+  value for up to the TTL window — unacceptable for a financial ledger where
+  "what is my balance right now" must be exact.
+
+**Rationale**:
+- *Correctness over staleness tolerance*: a balance changes if and only if a
+  transaction posts to that account. That is a precisely identifiable event,
+  so explicit invalidation at write time keeps the cache always-correct — no
+  race window, no "eventually consistent" caveat to explain to a user checking
+  their balance.
+- *Optional infrastructure*: Cache-Aside degrades gracefully. If Redis is down,
+  `get_redis_client` simply yields a client that fails to connect, the cache
+  read/write is skipped, and the API still serves correct results directly
+  from PostgreSQL — slower, but never wrong. A write-through design would force
+  a decision about what happens when the cache write fails mid-transaction.
+- *TTL as a safety net, not the primary mechanism*: a TTL is still set (so an
+  orphaned key — e.g. one written just before a crash prevented invalidation —
+  cannot live forever), but it is a backstop, not the invalidation strategy.
+
+**Trade-off**:
+- *Invalidation must enumerate every affected key*: because the cache key
+  includes `as_of_date`, a single account can have many cached entries (one
+  per date queried). `tests/test_balance_cache.py::test_post_transaction_invalidates_balance_cache`
+  demonstrates deleting the keys for both the debited and credited accounts —
+  but a date the cache hasn't seen yet obviously can't be (and doesn't need to
+  be) invalidated. A coarser per-account key (no date component) would make
+  invalidation trivial at the cost of cache hit rate for historical-balance
+  queries.
+- *Cache stampede risk*: if many requests for the same uncached key arrive
+  simultaneously, all of them miss and recompute concurrently. At current MVP
+  traffic this is negligible; a production hardening pass would add a
+  short-lived lock or "request coalescing" around the cache-fill step.
 
 ---
 
