@@ -46,9 +46,6 @@ async def test_request_log_trace_id_is_valid_otel_span_not_zero(
     request_log = next(e for e in cap.entries if e.get("event") == "request")
     trace_id = request_log["trace_id"]
 
-    # TODO: implement (hint: format(span.get_span_context().trace_id, "032x")
-    # produces a 32-character hex string; an INVALID_SPAN — i.e. no active
-    # OTel span — formats as 32 zeros: "0" * 32. Assert the captured
-    # trace_id is neither that placeholder nor an empty string, so this
-    # test fails the same way the S5-3 `trace_id = 0` regression did.)
-    pass
+    invalid_span_trace_id = "0" * 32
+    assert trace_id != invalid_span_trace_id
+    assert len(trace_id) == 32
