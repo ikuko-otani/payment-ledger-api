@@ -480,22 +480,52 @@ the classic synchronous `Session` + `psycopg2` combination.
 
 ### 9.2 Observability stack (structlog + OpenTelemetry + Jaeger)
 
-<!-- TODO: draft in English, ADR style. Cover at least:
-  - Decision: structlog for JSON-structured application logs,
-    OpenTelemetry for distributed tracing instrumentation, Jaeger as the
-    trace backend/UI — and how `trace_id` binds the two together via
-    `structlog.contextvars` (see app/middleware/logging.py).
-  - What was rejected / considered: plain stdlib `logging`, Sentry-only
-    error tracking, no tracing at all (logs only).
-  - Rationale: the "three pillars of observability" framing — logs answer
-    "what happened", traces answer "where did the time go across services",
-    and binding trace_id into every log line lets you pivot from a slow
-    request in Jaeger straight to its structured log lines (and vice versa).
-  - Trade-off: extra moving parts (OTel SDK, Jaeger container) and a
-    documented pitfall — instrumenting at the wrong lifecycle stage produces
-    `trace_id = "00000000000000000000000000000000"` (see
-    docs/learning-notes/s5-3-otel-fastapi-instrumentation.md).
--->
+**Decision**: Combine three tools, each responsible for one observability
+pillar: **structlog** for JSON-structured application logs, **OpenTelemetry**
+(OTel) for distributed-tracing instrumentation, and **Jaeger** as the trace
+storage/visualisation backend. The bridge between logs and traces is the
+`trace_id`: `app/middleware/logging.py` reads the active OTel span's trace ID
+and binds it into every structlog entry via `structlog.contextvars`.
+
+**What was rejected / considered**:
+- *Plain stdlib `logging`*: produces unstructured text lines that are hard to
+  query in a log aggregator (Loki, Datadog, CloudWatch Logs Insights all expect
+  structured fields).
+- *Tracing-only (no structured logs)*: traces show *where* time was spent
+  across a request, but not *why* a specific request failed (e.g. validation
+  error details, business-rule rejections).
+- *Logs-only (no tracing)*: logs alone cannot answer "why was this single
+  request slow?" across multiple internal calls — you'd need to manually
+  correlate timestamps across log lines.
+
+**Rationale**:
+- *Pivot in both directions*: a slow trace in the Jaeger UI shows the
+  `trace_id`; pasting that into the log aggregator surfaces every structured
+  log line for that exact request — method, path, status code, latency, and
+  any business-level fields the service layer chose to log. Conversely, an
+  error log line carries the `trace_id`, so you can jump straight to the
+  Jaeger trace and see which downstream call (DB query, Redis lookup) was slow
+  or failed.
+- *JSON logs are machine-first*: structlog emits one JSON object per event, so
+  every field (`request_id`, `trace_id`, `latency_ms`, …) is queryable without
+  regex parsing — a direct upgrade over grep-based log archaeology.
+- *Jaeger as the de facto OSS trace backend*: it speaks the OpenTelemetry
+  protocol natively, ships as a single Docker Compose service, and its UI
+  (waterfall view of spans) is immediately legible without custom dashboards.
+
+**Trade-off**:
+- *Operational surface area*: three tools means three things that can
+  misconfigure. The most subtle failure mode encountered was instrumenting
+  OTel at the wrong point in the FastAPI lifespan, which silently produced
+  `trace_id = "00000000000000000000000000000000"` (32 zeros — OTel's
+  `INVALID_SPAN` sentinel) instead of raising an error (see
+  `docs/learning-notes/s5-3-otel-fastapi-instrumentation.md`). The fix was to
+  call `instrument_app(app)` before the app starts serving requests, not
+  inside the lifespan callback.
+- *No metrics pillar yet*: latency percentiles and error-rate alerting
+  (Prometheus + Grafana) remain a "what I would add in production" item —
+  logs and traces alone cannot answer "is p99 latency degrading over the last
+  hour?" without manual aggregation.
 
 ### 9.3 Caching strategy (Cache-Aside for account balances)
 
