@@ -441,19 +441,42 @@ requirement.
 
 ### 9.1 Why async SQLAlchemy over sync
 
-<!-- TODO: draft in English, ADR style. Cover at least:
-  - Decision: SQLAlchemy 2.0 async engine + asyncpg driver, `AsyncSession`
-    throughout the service layer (vs. the classic sync `Session` + psycopg2).
-  - What was rejected: sync SQLAlchemy with a thread pool (FastAPI's default
-    `run_in_threadpool` behaviour for sync dependencies).
-  - Rationale: consistency with FastAPI's async request-handling model;
-    a single event loop can hold many in-flight DB-bound requests without
-    spawning OS threads, improving throughput under I/O-bound load
-    (the "C10k" argument — compare with PHP-FPM's one-process-per-request model).
-  - Trade-off: async adds complexity — `await` discipline, greenlet-based
-    lazy loading caveats (see docs/troubleshooting/sqlalchemy-missing-greenlet-lazy-load.md),
-    and a steeper learning curve than sync code.
--->
+**Decision**: Use SQLAlchemy 2.0's async engine with the `asyncpg` driver and
+`AsyncSession` throughout the service layer (`app/services/*.py`), rather than
+the classic synchronous `Session` + `psycopg2` combination.
+
+**What was rejected**: Sync SQLAlchemy, relying on FastAPI's automatic
+`run_in_threadpool` wrapping for sync route handlers and dependencies.
+
+**Rationale**:
+- *Consistency with FastAPI's concurrency model*: FastAPI is built on Starlette's
+  ASGI event loop. A sync DB call inside an `async def` route blocks that loop
+  for every other in-flight request; FastAPI works around this by offloading
+  sync calls to a thread pool, but that reintroduces a thread-per-request cost
+  that async was supposed to remove. Using `AsyncSession` end-to-end keeps the
+  whole request path on a single event loop with no thread-pool indirection.
+- *Throughput under I/O-bound load*: this API spends most of its time waiting
+  on PostgreSQL and Redis, not computing. While one request `await`s a query,
+  the event loop is free to advance other requests. (Compare: PHP-FPM allocates
+  one OS process per request — a process blocked on a DB query is a process
+  that cannot serve anyone else until the query returns.)
+- *Driver-level support*: `asyncpg` is a mature, high-performance async
+  PostgreSQL driver with native `async`/`await` support, making the async
+  SQLAlchemy path a first-class option rather than a compatibility shim.
+
+**Trade-off — what async gives up**:
+- *Cognitive overhead*: every DB-touching function must be `async def` and
+  every call must be `await`ed; forgetting one produces confusing runtime
+  errors rather than type errors.
+- *Lazy-loading caveats*: SQLAlchemy's classic lazy-load pattern
+  (`account.entries` triggering an implicit query) requires a greenlet bridge
+  in async mode and fails with `MissingGreenlet` if accessed outside an
+  awaited context (see `docs/troubleshooting/sqlalchemy-missing-greenlet-lazy-load.md`).
+  This pushes the team toward explicit eager loading (`selectinload`), which is
+  arguably better practice anyway but is an extra thing to learn.
+- *Smaller ecosystem*: fewer async-native extensions exist compared to the
+  mature sync SQLAlchemy ecosystem (e.g. some Alembic autogenerate workflows
+  still assume a sync engine, requiring a small sync/async bridge).
 
 ### 9.2 Observability stack (structlog + OpenTelemetry + Jaeger)
 
