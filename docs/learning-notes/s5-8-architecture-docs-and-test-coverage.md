@@ -161,4 +161,66 @@ authenticated request (registered as TD-015).
 
 ## Key Takeaways
 
-_(To be added in Step D after the PR is merged.)_
+### What did I learn?
+
+I learned a concrete, repeatable pattern for writing ADR-style design
+documentation in English: every section needs a *Decision* (what we chose),
+*What was rejected* (what we ruled out and why it wasn't chosen), *Rationale*
+(why the chosen approach is correct for this context), and *Trade-off* (what we
+gave up). Writing the "what was rejected" block is what separates a real ADR
+from a description — it proves the author considered alternatives.
+
+I also learned why `unittest.mock` belongs in the toolbox alongside
+integration tests. Wiring / configuration functions — code whose job is "call
+library X with arguments Y" — are unreachable by integration tests that override
+dependencies or never trigger the app lifespan. Mock-based unit tests are the
+right tool for asserting "were the right arguments passed and is cleanup wired
+up?", while real containers remain the right tool for end-to-end behavior.
+
+### What would I do differently?
+
+I would verify assertions more carefully before trusting that a test is
+"strong." The original `test_request_log_contains_required_fields` looked
+complete but only checked that the `trace_id` key existed — not that the value
+was a real OTel span ID. A weak assertion can give false confidence for the
+entire lifetime of the test suite. In future goals I will check not just
+"does this assertion pass" but "would this assertion catch the failure it is
+supposed to catch?"
+
+I would also define the measurement layer for latency DONE conditions up front.
+"Cache hit < 10ms" is unambiguous only once you decide whether it refers to the
+Redis operation, the full HTTP round-trip, or something in between. Settling
+that at goal-start avoids the "99ms vs 0.93ms" surprise during final verification.
+
+### What surprised me?
+
+I was surprised that `trace_id` had been `"000...000"` (the OTel INVALID_SPAN
+placeholder) in every single test run since S5-3 — silently, with no test
+failure. The fix was adding one session-scoped fixture to `conftest.py`, but
+the gap had existed across multiple sprints because the original assertion was
+too weak to expose it.
+
+I was also surprised that calling `trace.set_tracer_provider()` *after*
+`FastAPIInstrumentor().instrument_app(app)` still produces real span IDs. OTel's
+`ProxyTracer` defers resolution to whatever the global provider is at the moment
+a span is *created*, not at the moment `get_tracer()` is called — so late-wiring
+in a test fixture works correctly even though the instrumentation hook was
+registered at import time.
+
+### What is worth remembering for future goals?
+
+- **OTel test fixture pattern**: always add a session-scoped, autouse
+  `TracerProvider` fixture backed by `InMemorySpanExporter` whenever testing an
+  OTel-instrumented FastAPI app. Without it, every `trace_id` in logs is the
+  32-zero INVALID_SPAN placeholder and no test will catch it unless the assertion
+  explicitly checks the value.
+- **`trace.set_tracer_provider()` is once-per-process**: the fixture must be
+  `scope="session"` — a function-scoped fixture would silently stop having any
+  effect after the first test.
+- **`structlog.reset_defaults()`**: the correct teardown call after a test that
+  reconfigures structlog. Failing to restore the configuration poisons the
+  structlog state for all tests that run afterward.
+- **Stale handoff notes**: both TD-013 (coverage fix) and the Notion task
+  description (cache tests "not yet created") turned out to be outdated by the
+  time S5-8 started. Tool output (mypy diagnostics, git log, running pytest)
+  is more reliable than inherited text descriptions — verify before acting.
