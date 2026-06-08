@@ -66,10 +66,10 @@ async def create_exchange_rate(
     db.add(exchange_rate)
     try:
         await db.flush()
-    except IntegrityError:
+    except IntegrityError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Exchange rate for this currency pair and date already exists",
-        )
+        ) from e
     await db.refresh(exchange_rate)
     return exchange_rate
