@@ -432,6 +432,70 @@ requirement.
 
 ---
 
+## 9. Observability & Caching Design (S5)
+
+> Added in S5 after implementing structlog (JSON logging), OpenTelemetry +
+> Jaeger (distributed tracing), and a Redis-backed Cache-Aside layer for
+> `GET /accounts/{id}/balance`. As with Section 7, these are written as
+> interview-ready ADR entries: decision, rationale, and trade-offs.
+
+### 9.1 Why async SQLAlchemy over sync
+
+<!-- TODO: draft in English, ADR style. Cover at least:
+  - Decision: SQLAlchemy 2.0 async engine + asyncpg driver, `AsyncSession`
+    throughout the service layer (vs. the classic sync `Session` + psycopg2).
+  - What was rejected: sync SQLAlchemy with a thread pool (FastAPI's default
+    `run_in_threadpool` behaviour for sync dependencies).
+  - Rationale: consistency with FastAPI's async request-handling model;
+    a single event loop can hold many in-flight DB-bound requests without
+    spawning OS threads, improving throughput under I/O-bound load
+    (the "C10k" argument — compare with PHP-FPM's one-process-per-request model).
+  - Trade-off: async adds complexity — `await` discipline, greenlet-based
+    lazy loading caveats (see docs/troubleshooting/sqlalchemy-missing-greenlet-lazy-load.md),
+    and a steeper learning curve than sync code.
+-->
+
+### 9.2 Observability stack (structlog + OpenTelemetry + Jaeger)
+
+<!-- TODO: draft in English, ADR style. Cover at least:
+  - Decision: structlog for JSON-structured application logs,
+    OpenTelemetry for distributed tracing instrumentation, Jaeger as the
+    trace backend/UI — and how `trace_id` binds the two together via
+    `structlog.contextvars` (see app/middleware/logging.py).
+  - What was rejected / considered: plain stdlib `logging`, Sentry-only
+    error tracking, no tracing at all (logs only).
+  - Rationale: the "three pillars of observability" framing — logs answer
+    "what happened", traces answer "where did the time go across services",
+    and binding trace_id into every log line lets you pivot from a slow
+    request in Jaeger straight to its structured log lines (and vice versa).
+  - Trade-off: extra moving parts (OTel SDK, Jaeger container) and a
+    documented pitfall — instrumenting at the wrong lifecycle stage produces
+    `trace_id = "00000000000000000000000000000000"` (see
+    docs/learning-notes/s5-3-otel-fastapi-instrumentation.md).
+-->
+
+### 9.3 Caching strategy (Cache-Aside for account balances)
+
+<!-- TODO: draft in English, ADR style. Cover at least:
+  - Decision: Cache-Aside (lazy loading) pattern for
+    `GET /accounts/{id}/balance`, keyed as `balance:{account_id}:{as_of_date}`
+    in Redis, with explicit invalidation on transaction write
+    (see app/services/balance.py, app/core/cache.py, tests/test_balance_cache.py).
+  - What was rejected / considered: write-through caching (update cache on
+    every write), TTL-only invalidation (no explicit delete on write).
+  - Rationale: balances change only when a transaction posts to the account,
+    so explicit invalidation on write keeps the cache always-correct without
+    relying on a TTL race; Cache-Aside keeps the cache layer optional — if
+    Redis is unavailable, the API still serves correct (if slower) results
+    by falling through to PostgreSQL.
+  - Trade-off: invalidation must enumerate every affected key
+    (one per `as_of` date cached for the account) — a classic "cache
+    invalidation is one of the two hard problems" trade-off; a coarser
+    per-account key would simplify invalidation at the cost of cache hit rate.
+-->
+
+---
+
 ## 6. What I Would Add in Production
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out
