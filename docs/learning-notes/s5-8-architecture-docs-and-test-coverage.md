@@ -1,106 +1,164 @@
-# S5-8: ARCHITECTURE.md 記載 + S5 テスト補完
+# S5-8: ARCHITECTURE.md Design Docs + S5 Test Coverage Completion
 
 **Date**: 2026-06-09
 **Branch**: `feature/s5-8-architecture-docs-and-test-coverage`
-**Goal**: S5 の実装を採用アピール素材に昇華する。ARCHITECTURE.md に設計判断を英語で記述し、テストカバレッジを補完する。
+**Goal**: Elevate the S5 implementation into portfolio material by documenting
+design decisions in `ARCHITECTURE.md` in English and filling in test coverage
+gaps left by earlier S5 sprints.
 
 ---
 
 ## Step C Walkthrough
 
-### What was done
+### 1. ARCHITECTURE.md — Section 9 (three subsections)
 
-#### 1. ARCHITECTURE.md — Section 9 追加（3サブセクション）
-
-`ARCHITECTURE.md` に `## 9. Observability & Caching Design (S5)` を新設し、以下の3つの設計判断を ADR 形式（Decision / What was rejected / Rationale / Trade-off）で英語記述した。
+Added `## 9. Observability & Caching Design (S5)` to `ARCHITECTURE.md` in
+ADR format (Decision / What was rejected / Rationale / Trade-off).
 
 **9.1 Why async SQLAlchemy over sync**
-- Decision: SQLAlchemy 2.0 async engine + asyncpg + `AsyncSession`
-- What was rejected: sync SQLAlchemy + `run_in_threadpool`
-- Core rationale: FastAPI のイベントループモデルとの一貫性。I/O 待機中に他のリクエストを進められる（PHP-FPM のプロセス占有モデルとの対比で説明）。
-- Trade-off: `await` 規律の徹底、`MissingGreenlet` エラーのリスク、async 対応 extension のエコシステムの狭さ。
+
+- *Decision*: SQLAlchemy 2.0 async engine + asyncpg + `AsyncSession` end-to-end.
+- *What was rejected*: sync SQLAlchemy relying on FastAPI's `run_in_threadpool`.
+- *Core rationale*: Consistency with FastAPI's ASGI event loop. While one request
+  `await`s a DB query, the event loop can advance other requests — no thread-per-request
+  cost (contrasts with PHP-FPM's one-process-per-request model).
+- *Trade-off*: `await` discipline required everywhere; `MissingGreenlet` errors if
+  lazy-load is accessed outside an awaited context; narrower async extension ecosystem.
 
 **9.2 Observability stack (structlog + OTel + Jaeger)**
-- Decision: structlog（JSON 構造化ログ）+ OTel（トレーシング計装）+ Jaeger（バックエンド）。`trace_id` を structlog contextvars に bind して両者を連結。
-- What was rejected: stdlib `logging`（非構造化）、トレーシングのみ、ログのみ。
-- Core rationale: 「ログは何が起きたか」「トレースはどこで時間を使ったか」— trace_id を軸に双方向でピボットできる設計。
-- Trade-off: 設定が複雑で失敗が無音（S5-3 で `trace_id = 0` バグを実際に踏んだ経緯を記録）。メトリクス柱（Prometheus）は未実装。
+
+- *Decision*: structlog for JSON-structured logs, OpenTelemetry for tracing
+  instrumentation, Jaeger as the trace backend. `trace_id` is bound into every
+  structlog entry via `structlog.contextvars` so logs and traces can be
+  correlated in either direction.
+- *What was rejected*: plain stdlib `logging` (unstructured), tracing-only,
+  logs-only.
+- *Core rationale*: "Logs answer *what* happened; traces answer *where* the time
+  went." Binding `trace_id` into structlog allows pivoting from a slow Jaeger
+  trace directly to its structured log lines and vice versa.
+- *Trade-off*: Three moving parts, subtle misconfiguration failure mode —
+  instrumenting OTel at the wrong lifecycle stage produces
+  `trace_id = "000...000"` silently (encountered in S5-3; documented in
+  `docs/learning-notes/s5-3-otel-fastapi-instrumentation.md`). Metrics pillar
+  (Prometheus) is not yet implemented.
 
 **9.3 Caching strategy (Cache-Aside for account balances)**
-- Decision: Cache-Aside パターン。キー `balance:{account_id}:{as_of_date}`、取引投稿時に明示的 invalidation。
-- What was rejected: Write-through（書き込み経路をキャッシュの可用性に依存させる）、TTL のみの invalidation（残高の陳腐化ウィンドウが許容できない）。
-- Core rationale: 残高が変化するイベント（取引投稿）が明確に特定できるため、明示的 invalidation で常に正確な値を返せる。Redis 障害時もフォールバックで PostgreSQL を直接参照できる。
-- Trade-off: `as_of` 日付が異なるキーごとに invalidation が必要（「キャッシュ無効化はコンピュータサイエンスの2大難問の1つ」）。Cache stampede リスク（MVP では許容）。
+
+- *Decision*: Cache-Aside pattern for `GET /accounts/{id}/balance`.
+  Key: `balance:{account_id}:{as_of_date}`. Explicit invalidation on every
+  transaction write (cache keys for all affected accounts are deleted).
+- *What was rejected*: Write-through (couples write path to cache availability);
+  TTL-only invalidation (staleness window unacceptable for a financial ledger).
+- *Core rationale*: Balance changes if and only if a transaction posts to the
+  account — a precisely identifiable event. Explicit invalidation keeps the
+  cache always-correct. Cache-Aside degrades gracefully: if Redis is down, the
+  API still serves correct results from PostgreSQL.
+- *Trade-off*: Invalidation must enumerate every affected `as_of` cache key
+  ("cache invalidation is one of the two hard problems in computer science").
+  Cache stampede risk accepted at MVP scale.
 
 ---
 
-#### 2. テストカバレッジ補完
+### 2. Test coverage completion
 
-##### 発見 1: OTel TracerProvider がテストで設定されていなかった
+#### Finding 1 — OTel TracerProvider was never configured in the test session
 
-`tests/conftest.py` の `async_client` フィクスチャは `httpx.ASGITransport` を直接ラップするため、FastAPI の lifespan が発火しない。`configure_telemetry()`（lifespan 内）が呼ばれないため、グローバル TracerProvider は OTel デフォルトの no-op のまま。結果、テストスイート全体で `trace_id` が常に `"00000000000000000000000000000000"`（INVALID_SPAN）だった。
+`async_client` in `tests/conftest.py` wraps `httpx.ASGITransport` directly,
+which does not trigger FastAPI's ASGI lifespan events. Therefore
+`configure_telemetry()` (called inside `lifespan`) never ran, leaving the global
+`TracerProvider` as OTel's default no-op. As a result, every span created by
+`FastAPIInstrumentor` was an `INVALID_SPAN` with `trace_id = 0`, and
+`RequestLoggingMiddleware` was binding `"00000000000000000000000000000000"` into
+every structlog entry across the entire test suite — silently, because the
+existing test only checked `"trace_id" in request_log` (key presence), not the
+value.
 
-**対応**: `conftest.py` に session スコープ・autouse の `_configure_test_tracer_provider` フィクスチャを追加。`InMemorySpanExporter` バックエンドの `TracerProvider` を1回だけ設定することで、ネットワーク（Jaeger）なしに本物の trace_id が生成されるようになった。`trace.set_tracer_provider()` は1プロセスにつき1回のみ有効（2回目は警告を出して無視）なため、session スコープにする必要がある。
+**Fix**: added a session-scoped, autouse `_configure_test_tracer_provider`
+fixture to `conftest.py`. It calls `trace.set_tracer_provider()` once with a
+`TracerProvider` backed by `InMemorySpanExporter`, making real non-zero trace
+IDs available without a live Jaeger/OTLP endpoint.
 
-**追加したテスト（`tests/test_middleware_logging.py`）**:
-- `test_request_log_trace_id_is_valid_otel_span_not_zero`: 既存の「trace_id キーが存在する」チェックに加え、値が `"0" * 32` でなく長さが32文字であることを確認。S5-3 で踏んだ `trace_id = 0` バグのリグレッションテストとして機能する。
+`trace.set_tracer_provider()` may only be called once per process (subsequent
+calls are silently ignored after logging a warning) — hence the `scope="session"`
+requirement. A function-scoped fixture would silently stop working after the
+first test.
 
----
+**New test** (`tests/test_middleware_logging.py`):
 
-##### 発見 2: S5 の設定関数（wiring functions）がテストで未実行だった
+```
+test_request_log_trace_id_is_valid_otel_span_not_zero
+```
 
-`configure_structlog()`、`configure_telemetry()`、`get_redis_client()` はいずれも lifespan または `dependency_overrides` によりテストでは一度も実行されず、カバレッジが 56〜67% に留まっていた。
-
-**対応方針（「意味のある80%」vs「形式的な80%」の観点から）**:
-これらは「外部ライブラリにこういう設定で接続して」と指示するだけの配線コード。「ライブラリが動くか」ではなく「正しい引数・設定値で呼び出しているか」を検証する単体テストを新規ファイル `tests/test_observability_config.py` として追加。
-
-既存テストスイートでは初めて `unittest.mock` を使うパターン。使い分けの基準：
-- 統合テスト（実際の DB/Redis コンテナ）: 「エンドポイントが正しく動くか」
-- 単体テスト（モック）: 「配線関数が正しい引数でライブラリを呼び出しているか」
-
-追加した3テスト：
-
-1. `test_configure_structlog_wires_json_renderer_and_print_logger`
-   - `configure_structlog()` 呼び出し後 `structlog.get_config()` を検査し、`JSONRenderer`・`TimeStamper`・`PrintLoggerFactory` が設定されていることを確認。
-   - teardown: `structlog.reset_defaults()` で元に戻す（structlog 標準 API）。
-
-2. `test_configure_telemetry_builds_provider_tagged_with_service_name`
-   - `trace.set_tracer_provider` をモックに差し替えて `configure_telemetry()` を実行。
-   - `set_tracer_provider` が呼ばれた引数（`TracerProvider`）の `resource.attributes[SERVICE_NAME]` が `"payment-ledger-api"` であることを確認。
-   - `set_tracer_provider` の「1回限り」制約をモックで回避できる利点がある。
-
-3. `test_get_redis_client_builds_from_settings_and_closes_on_exit`
-   - `aioredis.from_url` をモックに差し替え、`settings.redis_url` + `decode_responses=True` で呼ばれることを確認（`decode_responses=True` を忘れると `balance.py` の文字列処理が壊れるため重要）。
-   - ジェネレータが終了した際に `client.aclose()` が `await` されることを確認（リソースリークなし）。
-
-**結果**: S5 新規モジュール全件 100%、全体 90%（91件全テストグリーン）。
+Asserts that the captured `trace_id` is not `"0" * 32` and has length 32.
+Acts as a regression guard for the S5-3 `trace_id = 0` bug: if OTel
+instrumentation breaks again, this test fails before any human notices the
+silent placeholder appearing in production logs.
 
 ---
 
-#### 3. S5 全 DONE 条件の最終確認（Step 6 で判明したこと）
+#### Finding 2 — S5 wiring functions were never exercised by the test suite
 
-| 項目 | 結果 |
+`configure_structlog()`, `configure_telemetry()`, and `get_redis_client()`
+had 56–67% coverage because all three run exclusively inside the FastAPI
+lifespan or are replaced by `dependency_overrides` — neither of which is
+triggered by the `ASGITransport`-based test client.
+
+**Approach — "meaningful 80%" vs "formal 80%"**
+
+These are *wiring* functions whose job is "call library X with arguments Y."
+The meaningful thing to verify is "were the right arguments passed and is
+cleanup wired up?" — not "does the library work?" (that is the library's own
+test suite's responsibility). Mock-based unit tests are therefore the correct
+tool here, whereas the rest of this test suite uses integration-style tests
+against real containers.
+
+This is the first use of `unittest.mock` in the test suite. The guiding
+principle: use mocks for *configuration/wiring code*; use real containers for
+*end-to-end behavior*.
+
+**New file**: `tests/test_observability_config.py`
+
+| Test | What it verifies |
 |---|---|
-| JSON 構造化ログ（trace_id/request_id/latency_ms） | ✅ テストグリーン |
-| Jaeger UI でトレース表示確認 | ✅ 手動確認済み |
-| balance キャッシュヒット < 10ms | ✅ Redis レイテンシ avg 0.93ms（`redis-cli --latency` で確認） |
-| mypy strict エラーゼロ | ✅ `no issues found in 51 source files` |
-| ruff エラーゼロ | ✅ `All checks passed!` |
+| `test_configure_structlog_wires_json_renderer_and_print_logger` | After calling `configure_structlog()`, `structlog.get_config()` reflects `JSONRenderer`, `TimeStamper`, and `PrintLoggerFactory`. Torn down with `structlog.reset_defaults()` to avoid polluting subsequent tests. |
+| `test_configure_telemetry_builds_provider_tagged_with_service_name` | Mocks `trace.set_tracer_provider` to inspect the `TracerProvider` that `configure_telemetry()` constructs. Asserts `resource.attributes[SERVICE_NAME] == "payment-ledger-api"` — the tag that makes this service's traces identifiable in Jaeger. Mocking also sidesteps the "only callable once" constraint. |
+| `test_get_redis_client_builds_from_settings_and_closes_on_exit` | Mocks `aioredis.from_url` and verifies it is called with `settings.redis_url` and `decode_responses=True` (critical: without this flag the service layer receives bytes instead of strings). Also asserts `client.aclose()` is awaited when the generator exits — confirming no resource leak. |
 
-**注意**: curl `time_total`（HTTP 全体往復）はキャッシュヒット時でも約99ms。Redis 自体は1ms未満で応答しており、残り約98ms は `get_current_user` が毎リクエスト DB 問い合わせしているオーバーヘッドと推測される（TD-015 として登録済み）。
+**Result**: all S5 new-code modules at 100%; overall coverage 90%
+(91 tests, all green).
+
+---
+
+### 3. S5 final DONE-condition check (Step 6 findings)
+
+| Condition | Result |
+|---|---|
+| JSON structured logs (trace_id / request_id / latency_ms) | ✅ test green |
+| Jaeger UI trace display | ✅ confirmed manually |
+| balance cache hit < 10ms | ✅ Redis round-trip avg 0.93ms (`redis-cli --latency`) |
+| mypy strict zero errors | ✅ `no issues found in 51 source files` |
+| ruff zero errors | ✅ `All checks passed!` |
+
+**Note on the < 10ms target**: curl `time_total` for a cache-hit request was
+~99ms end-to-end. Isolating layers showed Redis itself responds in < 1ms
+(avg 0.93ms); the remaining ~98ms is HTTP/auth/serialization overhead —
+primarily `get_current_user` re-querying the `users` table on every
+authenticated request (registered as TD-015).
 
 ---
 
 ## Files Changed
 
-| ファイル | 変更内容 |
+| File | Change |
 |---|---|
-| `ARCHITECTURE.md` | Section 9（Why async SQLAlchemy / Observability stack / Caching strategy）を ADR 形式で英語追記 |
-| `tests/conftest.py` | session スコープの `_configure_test_tracer_provider` フィクスチャを追加（OTel TracerProvider をテストで有効化） |
-| `tests/test_middleware_logging.py` | `test_request_log_trace_id_is_valid_otel_span_not_zero` を追加（trace_id の非ゼロ検証） |
-| `tests/test_observability_config.py` | S5 wiring functions（structlog/OTel/Redis）の単体テストを新規作成 |
-| `docs/tech-debt.md` | TD-015 登録（`get_current_user` の per-request DB ラウンドトリップ） |
+| `ARCHITECTURE.md` | Section 9 added — three ADR-style sections in English |
+| `tests/conftest.py` | `_configure_test_tracer_provider` session-scoped autouse fixture |
+| `tests/test_middleware_logging.py` | `test_request_log_trace_id_is_valid_otel_span_not_zero` added |
+| `tests/test_observability_config.py` | New file — unit tests for S5 wiring functions |
+| `docs/tech-debt.md` | TD-015 registered |
+
+---
 
 ## Key Takeaways
 
-_（Step D で追記予定）_
+_(To be added in Step D after the PR is merged.)_
