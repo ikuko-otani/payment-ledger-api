@@ -47,9 +47,6 @@ ignore = ["E501", "B008", "UP042"]
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 
-[tool.coverage.run]
-concurrency = ["asyncio", "thread"]
-
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
