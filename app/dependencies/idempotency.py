@@ -9,9 +9,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 import redis.asyncio as aioredis

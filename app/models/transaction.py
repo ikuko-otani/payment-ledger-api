@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import date, datetime
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, DateTime, Enum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
