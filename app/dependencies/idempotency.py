@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 import redis.asyncio as aioredis
@@ -22,10 +23,10 @@ _IDEMPOTENCY_TTL_SECONDS = 86_400
 _REDIS_KEY_PREFIX = "idempotency:"
 
 
-async def get_redis() -> aioredis.Redis:  # type: ignore[type-arg]
+async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
     """Yield a Redis client. Called once per request."""
-    # 📋 No need to edit — redis.asyncio handles connection pooling automatically.
-    client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
+    # redis.asyncio handles connection pooling automatically.
+    client: aioredis.Redis = aioredis.from_url(
         settings.redis_url, encoding="utf-8", decode_responses=True
     )
     try:
@@ -34,7 +35,7 @@ async def get_redis() -> aioredis.Redis:  # type: ignore[type-arg]
         await client.aclose()
 
 
-RedisDep = Annotated[aioredis.Redis, Depends(get_redis)]  # type: ignore[type-arg]
+RedisDep = Annotated[aioredis.Redis, Depends(get_redis)]
 
 
 async def check_idempotency(

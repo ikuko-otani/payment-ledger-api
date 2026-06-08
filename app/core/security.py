@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import bcrypt
 from jose import jwt
@@ -25,4 +26,6 @@ def create_access_token(data: dict[str, object]) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
     to_encode["exp"] = expire
-    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    return cast(
+        str, jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    )

@@ -25,6 +25,12 @@ jobs:
       - name: Lint with ruff
         run: uv run ruff check .
 
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Type check with mypy
+        run: uv run mypy app/
+
   test:
     runs-on: ubuntu-latest
     env:

@@ -34,7 +34,7 @@ class EntryCreate(BaseModel):
 
     @field_validator("amount")
     @classmethod
-    def amount_must_be_positive(cls, v: int):
+    def amount_must_be_positive(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("amount must be greater than 0")
         return v

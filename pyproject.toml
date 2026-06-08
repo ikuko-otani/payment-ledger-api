@@ -49,17 +49,8 @@ known-first-party = ["app"]
 
 [tool.mypy]
 python_version = "3.12"
+strict = true
 ignore_missing_imports = true
-warn_return_any = false
-
-[[tool.mypy.overrides]]
-module = [
-    "app.db.session",
-    "app.services.balance",
-    "app.models.transaction",
-    "app.dependencies.idempotency",
-]
-ignore_errors = true
 
 [tool.uv]
 link-mode = "copy"

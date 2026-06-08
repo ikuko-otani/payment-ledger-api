@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, DateTime, Enum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -57,7 +57,7 @@ class Transaction(Base):
     )
     # column name "metadata" in DB
     # metadata_ in Python to avoid conflict with SQLAlchemy's internal MetaData object
-    metadata_: Mapped[dict | None] = mapped_column(
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True, default=None
     )
 
