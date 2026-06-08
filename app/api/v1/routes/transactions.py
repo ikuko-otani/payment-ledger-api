@@ -43,6 +43,7 @@ async def post_transaction(
     current_user: AdminUser,
 ) -> Transaction:
     transaction = await create_transaction(db, payload, current_user.id)
+    # TODO: implement — await db.commit() here before cache invalidation (TD-018)
     for entry in payload.entries:
         pattern = f"balance:{entry.account_id}:*"
         keys = await redis.keys(pattern)
