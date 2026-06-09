@@ -137,4 +137,57 @@ the very next line (result assignment or continuation logic) is marked missed.
 
 ## Key Takeaways
 
-<!-- Added after goal closeout (Step D) -->
+### What did I learn?
+
+I learned that `addopts` in `[tool.pytest.ini_options]` is the right place to
+put coverage flags that should apply universally — local dev, CI, and IDE test
+runners all pick them up automatically without any coordination. I also learned
+how to read a `--cov-report=term-missing` table: the `Missing` column gives
+exact line numbers, which makes it straightforward to open the file and
+understand which execution paths have never been exercised.
+
+I learned to distinguish five categories of coverage gaps: error handling paths,
+auth/permission failures, boundary/edge cases, infrastructure/startup paths, and
+TD-013 async false negatives. That classification turned out to be more useful
+than a raw list of line numbers, because it directly maps to what kind of test
+needs to be written in S6-3.
+
+### What would I do differently?
+
+I would run the coverage audit earlier in the sprint (before S6, not in S6-2)
+so that the gap classification could inform test design from the beginning. The
+"measure first, then supplement" order enforced by S6-2 → S6-3 is good
+discipline, but discovering that `get_db()` has 46% coverage only because tests
+bypass it entirely (not because it is untested logic) would have been useful
+context when writing earlier tests.
+
+### What surprised me?
+
+The 46% coverage on `app/db/session.py` was surprising at first. The `get_db()`
+function looks trivial, but its entire body (lines 29–35: the `async with`
+context, `yield`, commit, and rollback) is unreachable from tests because every
+test fixture injects its own session directly. This is intentional — test
+isolation requires bypassing `get_db` — but coverage.py has no way to know that.
+It reads as a gap even though the function itself is not the thing being tested.
+
+Similarly, TD-013 caused `app/services/user_service.py` to report 53% coverage
+even though `create_user` is called by the HTTP tests. The async continuation
+lines after `await db.execute()` were marked missed despite executing at runtime.
+
+### What is worth remembering for future goals?
+
+1. **TD-013 signature**: `await X` line is marked covered, but the very next
+   assignment or conditional is marked missed. This is a false negative —
+   investigate actual test coverage before writing a new test for that line.
+
+2. **`--cov-fail-under` threshold**: set conservatively (85%, not 90%+) when
+   TD-013 affects async-heavy code. The threshold is a regression guard, not a
+   goal in itself.
+
+3. **Gap classification framework** (reusable for future audit goals):
+   error handling → auth failures → boundary cases → infrastructure → TD-013.
+   Apply this order to prioritise S6-3 test additions.
+
+4. **`get_db()` coverage is structurally low** in this codebase and will remain
+   so. Do not treat it as a test gap requiring new tests — the session lifecycle
+   is covered by the fixture design, not by calling `get_db` directly.
