@@ -43,6 +43,7 @@ async def post_transaction(
     current_user: AdminUser,
 ) -> Transaction:
     transaction = await create_transaction(db, payload, current_user.id)
+    await db.commit()
     for entry in payload.entries:
         pattern = f"balance:{entry.account_id}:*"
         keys = await redis.keys(pattern)

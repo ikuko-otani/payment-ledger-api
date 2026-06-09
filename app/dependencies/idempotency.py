@@ -41,28 +41,33 @@ RedisDep = Annotated[aioredis.Redis, Depends(get_redis)]
 async def check_idempotency(
     redis: RedisDep,
     idempotency_key: Annotated[uuid.UUID | None, Header()] = None,
-) -> None:
+) -> AsyncGenerator[None, None]:
     """FastAPI dependency: reject duplicate requests by Idempotency-Key.
 
     - If the header is absent, skip the check (key is optional).
     - If the key is new   → store it in Redis (NX + EX) and continue.
     - If the key exists   → raise 409 Conflict.
+    - If the request fails (any exception) → delete the key so the client can retry.
+      Prevents legitimate retries from being permanently blocked by a failed request
+      that set the key before the DB transaction committed (TD-017).
     """
     if idempotency_key is None:
+        yield
         return
 
     redis_key = f"{_REDIS_KEY_PREFIX}{idempotency_key}"
 
-    # Use redis.set() with nx=True and ex=_IDEMPOTENCY_TTL_SECONDS.
-    # SET NX returns True when the key was newly created, False when it already existed.
-    # If False (= duplicate), raise HTTPException with status 409 and
-    # detail="Duplicate request: Idempotency-Key already used".
     was_set = await redis.set(redis_key, "1", nx=True, ex=_IDEMPOTENCY_TTL_SECONDS)
     if not was_set:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Duplicate request: Idempotency-Key already used",
         )
+    try:
+        yield
+    except Exception:
+        await redis.delete(redis_key)
+        raise
 
 
 IdempotencyDep = Annotated[None, Depends(check_idempotency)]
