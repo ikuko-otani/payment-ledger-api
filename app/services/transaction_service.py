@@ -103,13 +103,18 @@ async def create_transaction(
     # Validate: all account_ids must exist in the accounts table
     # ------------------------------------------------------------------
     account_ids = {e.account_id for e in payload.entries}
-    result = await db.execute(select(Account).where(Account.id.in_(account_ids)))
+    result = await db.execute(
+        select(Account).where(
+            Account.id.in_(account_ids),
+            Account.is_active.is_(True),
+        )
+    )
     found_ids = {row.id for row in result.scalars().all()}
     missing = account_ids - found_ids
     if missing:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Unknown account_ids: {[str(i) for i in missing]}",
+            detail=f"Unknown or inactive account_ids: {[str(i) for i in missing]}",
         )
 
     # ------------------------------------------------------------------

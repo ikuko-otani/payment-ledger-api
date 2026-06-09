@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,12 +24,16 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 @router.get("", response_model=list[TransactionRead])
 async def list_transactions(
-    db: DbDep, _current_user: AuditorOrAdminUser
+    db: DbDep,
+    _current_user: AuditorOrAdminUser,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> list[Transaction]:
     result = await db.execute(
-        # 💡 selectinload: Transaction を取得するとき entries も一緒にロードする。
-        #    N+1 問題を避けるための eager loading。
-        select(Transaction).options(selectinload(Transaction.entries))
+        select(Transaction)
+        .options(selectinload(Transaction.entries))
+        .offset(offset)
+        .limit(limit)
     )
     return list(result.scalars().all())
 

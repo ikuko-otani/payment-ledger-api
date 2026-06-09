@@ -152,6 +152,91 @@ async def test_get_transactions_returns_list_shape(
 
 
 @pytest.mark.asyncio
+async def test_list_transactions_default_limit_returns_at_most_20(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /transactions without params must default to limit=20 (TD-003)."""
+    debit_id = await _seed_account(
+        db_session, "Cash-Limit", AccountType.ASSET, code="1110"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-Limit", AccountType.REVENUE, code="4010"
+    )
+    payload_base = {
+        "transaction_date": "2024-01-01",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 10,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 10,
+                "currency": "EUR",
+            },
+        ],
+    }
+    for i in range(25):
+        await async_client.post(
+            "/api/v1/transactions", json={**payload_base, "description": f"tx-{i}"}
+        )
+
+    response = await async_client.get("/api/v1/transactions")
+    assert response.status_code == 200
+    assert len(response.json()) <= 20
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_offset_skips_records(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /transactions?limit=1&offset=0 and offset=1 must return different records (TD-003)."""
+    debit_id = await _seed_account(
+        db_session, "Cash-Off", AccountType.ASSET, code="1111"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-Off", AccountType.REVENUE, code="4011"
+    )
+    payload_base = {
+        "transaction_date": "2024-01-01",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": 10,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": 10,
+                "currency": "EUR",
+            },
+        ],
+    }
+    for i in range(2):
+        await async_client.post(
+            "/api/v1/transactions",
+            json={**payload_base, "description": f"offset-tx-{i}"},
+        )
+
+    r0 = await async_client.get(
+        "/api/v1/transactions", params={"limit": 1, "offset": 0}
+    )
+    r1 = await async_client.get(
+        "/api/v1/transactions", params={"limit": 1, "offset": 1}
+    )
+    assert r0.status_code == 200
+    assert r1.status_code == 200
+    assert r0.json()[0]["id"] != r1.json()[0]["id"]
+
+
+@pytest.mark.asyncio
 async def test_post_then_get_shows_persisted_record(
     async_client: AsyncClient,
     db_session: AsyncSession,

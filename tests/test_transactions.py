@@ -340,6 +340,46 @@ async def test_all_credit_entries_raises_http_422(
 
 
 @pytest.mark.asyncio
+async def test_inactive_account_raises_http_422(
+    db_session: AsyncSession,
+) -> None:
+    """Posting to an is_active=False account must be rejected with 422 (TD-011)."""
+    debit = await _create_account(
+        db_session, "Cash-Inactive", AccountType.ASSET, code="1130"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-Inactive", AccountType.REVENUE, code="4030"
+    )
+
+    debit.is_active = False
+    db_session.add(debit)
+    await db_session.commit()
+
+    payload = TransactionCreate(
+        description="Post to inactive account",
+        transaction_date=date(2024, 1, 1),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=500,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=500,
+                currency="EUR",
+            ),
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_mixed_currency_entries_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
