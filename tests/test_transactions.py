@@ -351,7 +351,9 @@ async def test_inactive_account_raises_http_422(
         db_session, "Revenue-Inactive", AccountType.REVENUE, code="4030"
     )
 
-    # TODO: implement — set debit.is_active = False and commit
+    debit.is_active = False
+    db_session.add(debit)
+    await db_session.commit()
 
     payload = TransactionCreate(
         description="Post to inactive account",
@@ -372,7 +374,9 @@ async def test_inactive_account_raises_http_422(
         ],
     )
 
-    # TODO: implement — assert raises HTTPException with status_code == 422
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+    assert exc_info.value.status_code == 422
 
 
 @pytest.mark.asyncio
