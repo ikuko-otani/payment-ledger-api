@@ -66,7 +66,7 @@ async def check_idempotency(
     try:
         yield
     except Exception:
-        # TODO: implement (hint: await redis.delete(redis_key) to release the key)
+        await redis.delete(redis_key)
         raise
 
 
