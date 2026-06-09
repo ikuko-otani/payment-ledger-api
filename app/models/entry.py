@@ -52,7 +52,7 @@ class Entry(Base):
         Enum(Direction, name="direction"),
         nullable=False,
     )
-    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(
         String(3),
         nullable=False,  # ISO 4217 code e.g. "EUR", "USD", "JPY"

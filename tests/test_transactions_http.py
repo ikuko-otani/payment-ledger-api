@@ -152,6 +152,24 @@ async def test_get_transactions_returns_list_shape(
 
 
 @pytest.mark.asyncio
+async def test_list_transactions_default_limit_returns_at_most_20(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /transactions without params must default to limit=20 (TD-003)."""
+    # TODO: implement — seed 25 transactions, GET without params, assert len <= 20
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_offset_skips_records(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /transactions?limit=1&offset=0 and offset=1 must return different records (TD-003)."""
+    # TODO: implement — seed 2 transactions, compare results with offset=0 and offset=1
+
+
+@pytest.mark.asyncio
 async def test_post_then_get_shows_persisted_record(
     async_client: AsyncClient,
     db_session: AsyncSession,
