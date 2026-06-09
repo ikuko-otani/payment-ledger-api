@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,13 +26,14 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 async def list_transactions(
     db: DbDep,
     _current_user: AuditorOrAdminUser,
-    # TODO: implement — add limit: int = Query(default=20, ge=1, le=100)
-    # TODO: implement — add offset: int = Query(default=0, ge=0)
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> list[Transaction]:
     result = await db.execute(
         select(Transaction)
         .options(selectinload(Transaction.entries))
-        # TODO: implement — add .offset(offset).limit(limit)
+        .offset(offset)
+        .limit(limit)
     )
     return list(result.scalars().all())
 
