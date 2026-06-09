@@ -106,7 +106,7 @@ async def create_transaction(
     result = await db.execute(
         select(Account).where(
             Account.id.in_(account_ids),
-            # TODO: implement — add Account.is_active == True condition (TD-011)
+            Account.is_active == True,
         )
     )
     found_ids = {row.id for row in result.scalars().all()}
