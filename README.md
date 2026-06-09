@@ -1,5 +1,9 @@
 Double-entry ledger API built with FastAPI
 
+## Badges
+
+[![codecov](https://codecov.io/gh/ikuko-otani/payment-ledger-api/graph/badge.svg)](https://codecov.io/gh/ikuko-otani/payment-ledger-api)
+
 ## Observability
 
 This project ships with [Jaeger](https://www.jaegertracing.io/) for distributed tracing via OpenTelemetry.
