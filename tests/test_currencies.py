@@ -55,10 +55,17 @@ async def test_exchange_rates_no_filter_returns_all(async_client: AsyncClient) -
     ]:
         await async_client.post(
             "/api/v1/exchange-rates",
-            json={"from_currency_id": from_id, "to_currency_id": to_id, "rate": "1.08000000", "effective_date": d},
+            json={
+                "from_currency_id": from_id,
+                "to_currency_id": to_id,
+                "rate": "1.08000000",
+                "effective_date": d,
+            },
         )
 
-    # TODO: implement (hint: GET /exchange-rates → assert len(response.json()) == 2)
+    response = await async_client.get("/api/v1/exchange-rates")
+    assert response.status_code == 200
+    assert len(response.json()) == 2
 
 
 @pytest.mark.asyncio
@@ -75,10 +82,21 @@ async def test_exchange_rates_filtered_by_from_currency_id(
     for from_id, to_id in [(usd_id, eur_id), (eur_id, usd_id)]:
         await async_client.post(
             "/api/v1/exchange-rates",
-            json={"from_currency_id": from_id, "to_currency_id": to_id, "rate": "1.08000000", "effective_date": "2024-01-01"},
+            json={
+                "from_currency_id": from_id,
+                "to_currency_id": to_id,
+                "rate": "1.08000000",
+                "effective_date": "2024-01-01",
+            },
         )
 
-    # TODO: implement (hint: GET /exchange-rates?from_currency_id=usd_id → only 1 row, and it has from_currency_id == usd_id)
+    response = await async_client.get(
+        "/api/v1/exchange-rates", params={"from_currency_id": usd_id}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["from_currency_id"] == usd_id
 
 
 @pytest.mark.asyncio
@@ -95,10 +113,21 @@ async def test_exchange_rates_filtered_by_effective_date(
     for d in ["2024-01-01", "2024-06-01"]:
         await async_client.post(
             "/api/v1/exchange-rates",
-            json={"from_currency_id": usd_id, "to_currency_id": eur_id, "rate": "1.08000000", "effective_date": d},
+            json={
+                "from_currency_id": usd_id,
+                "to_currency_id": eur_id,
+                "rate": "1.08000000",
+                "effective_date": d,
+            },
         )
 
-    # TODO: implement (hint: GET /exchange-rates?effective_date=2024-01-01 → 1 row, effective_date == "2024-01-01")
+    response = await async_client.get(
+        "/api/v1/exchange-rates", params={"effective_date": "2024-01-01"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["effective_date"] == "2024-01-01"
 
 
 # POST /api/v1/exchange-rates twice with same pair+date → second returns 409
