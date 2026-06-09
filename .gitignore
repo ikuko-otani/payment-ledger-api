@@ -7,3 +7,7 @@ flagship-goal-prompt-template.md
 
 # Claude Code local settings (not version-controlled)
 .claude/
+
+# pytest coverage artifacts
+.coverage
+htmlcov/
