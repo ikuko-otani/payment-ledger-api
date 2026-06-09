@@ -205,26 +205,48 @@ async def test_failed_transaction_releases_idempotency_key_for_retry(
         "description": "Unbalanced",
         "transaction_date": "2024-06-01",
         "entries": [
-            # TODO: implement — debit 200, credit 100 (unbalanced; debit_sum != credit_sum)
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 200,
+                "currency": "USD",
+            },
+            {
+                "account_id": str(acc_credit.id),
+                "direction": "credit",
+                "amount": 100,
+                "currency": "USD",
+            },
         ],
     }
     r1 = await idempotent_client.post(
         "/api/v1/transactions", json=bad_payload, headers={"Idempotency-Key": key}
     )
-    # TODO: implement — assert r1.status_code == 422
+    assert r1.status_code == 422
 
     # Step 2: Retry with the same key and a valid payload — key should have been released
     good_payload = {
         "description": "Retry after fix",
         "transaction_date": "2024-06-01",
         "entries": [
-            # TODO: implement — balanced debit/credit using acc_debit, acc_credit
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 100,
+                "currency": "USD",
+            },
+            {
+                "account_id": str(acc_credit.id),
+                "direction": "credit",
+                "amount": 100,
+                "currency": "USD",
+            },
         ],
     }
     r2 = await idempotent_client.post(
         "/api/v1/transactions", json=good_payload, headers={"Idempotency-Key": key}
     )
-    # TODO: implement — assert r2.status_code == 201
+    assert r2.status_code == 201
 
 
 @pytest.mark.asyncio
@@ -249,19 +271,30 @@ async def test_balance_reflects_new_transaction_after_commit(
         "description": "Balance commit test",
         "transaction_date": "2024-06-01",
         "entries": [
-            # TODO: implement — debit 500 on acc_debit, credit 500 on acc_credit
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 500,
+                "currency": "USD",
+            },
+            {
+                "account_id": str(acc_credit.id),
+                "direction": "credit",
+                "amount": 500,
+                "currency": "USD",
+            },
         ],
     }
     r_post = await full_flow_client.post("/api/v1/transactions", json=payload)
-    # TODO: implement — assert r_post.status_code == 201
+    assert r_post.status_code == 201
 
     # Step 2: GET balance for acc_debit — should reflect the posted debit
     as_of = datetime.utcnow().isoformat()
     r_balance = await full_flow_client.get(
         f"/api/v1/accounts/{acc_debit.id}/balance", params={"as_of": as_of}
     )
-    # TODO: implement — assert r_balance.status_code == 200
-    # TODO: implement — assert r_balance.json()["balance"] == 500
+    assert r_balance.status_code == 200
+    assert r_balance.json()["balance"] == 500
 
 
 async def test_no_idempotency_key_header_succeeds(
