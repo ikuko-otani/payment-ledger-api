@@ -131,3 +131,36 @@ async def test_nonexistent_user_id_token_returns_401(
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# S6-3: sub=None path (deps.py line 36)
+# ---------------------------------------------------------------------------
+
+
+def _no_sub_token() -> str:
+    """Return a JWT signed correctly but with no 'sub' claim at all."""
+    from datetime import datetime, timedelta
+
+    from jose import jwt as jose_jwt
+
+    from app.core.config import settings
+
+    payload = {"exp": datetime.now(UTC) + timedelta(minutes=30)}
+    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+@pytest.mark.asyncio
+async def test_jwt_missing_sub_claim_returns_401(
+    unauthed_client: AsyncClient,
+) -> None:
+    """GET /accounts with a JWT that has no 'sub' claim must return 401.
+
+    Exercises deps.py line 36: `if sub is None: raise credentials_exception`.
+    """
+    # TODO: implement (hint: call _no_sub_token(), send to GET /api/v1/accounts, expect 401)
+    token = _no_sub_token()
+    response = await unauthed_client.get(
+        "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 401

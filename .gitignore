@@ -10,4 +10,5 @@ flagship-goal-prompt-template.md
 
 # pytest coverage artifacts
 .coverage
+coverage.xml
 htmlcov/
