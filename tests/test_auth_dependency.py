@@ -146,8 +146,7 @@ def _no_sub_token() -> str:
 
     from app.core.config import settings
 
-    # TODO: implement (hint: payload has only "exp", no "sub" key)
-    payload: dict[str, object] = {}
+    payload = {"exp": datetime.now(UTC) + timedelta(minutes=30)}
     return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
