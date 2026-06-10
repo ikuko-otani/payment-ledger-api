@@ -31,6 +31,9 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy --strict app/
 
+      - name: Security audit (pip-audit)
+        run: uv run pip-audit
+
   test:
     runs-on: ubuntu-latest
     env:
