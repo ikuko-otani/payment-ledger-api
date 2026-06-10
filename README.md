@@ -5,6 +5,11 @@ Double-entry ledger API built with FastAPI
 [![CI](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ikuko-otani/payment-ledger-api/graph/badge.svg)](https://codecov.io/gh/ikuko-otani/payment-ledger-api)
 
+## CI
+
+Every push and pull request runs linting (ruff), type checking (mypy --strict),
+the test suite with coverage, and a dependency vulnerability scan (pip-audit).
+
 ## Observability
 
 This project ships with [Jaeger](https://www.jaegertracing.io/) for distributed tracing via OpenTelemetry.
