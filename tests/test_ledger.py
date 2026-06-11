@@ -1,4 +1,4 @@
-"""Integration tests for GET /ledger endpoint (S4-6)."""
+"""Integration tests for GET /ledger endpoint."""
 
 from __future__ import annotations
 

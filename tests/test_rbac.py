@@ -1,4 +1,4 @@
-"""RBAC integration tests: admin / auditor / inactive-user access control (S3-5)."""
+"""RBAC integration tests: admin / auditor / inactive-user access control."""
 
 from __future__ import annotations
 

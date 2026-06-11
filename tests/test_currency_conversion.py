@@ -1,4 +1,4 @@
-"""Currency conversion tests for POST /transactions (S4-3).
+"""Currency conversion tests for POST /transactions.
 
 Design notes:
 - All tests use authenticated_client("admin") to ensure ExchangeRate seeds
