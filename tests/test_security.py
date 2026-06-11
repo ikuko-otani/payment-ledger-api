@@ -41,9 +41,10 @@ async def test_unauthenticated_request_to_protected_endpoint_returns_401(
 @pytest.mark.asyncio
 async def test_tampered_jwt_returns_401(unauthed_client: AsyncClient) -> None:
     """A garbage token 'xxx.yyy.zzz' must return 401 (JWTError -> credentials_exception)."""
-    # TODO: implement (hint: GET /api/v1/accounts with
-    # headers={"Authorization": "Bearer xxx.yyy.zzz"}; assert 401)
-    ...
+    response = await unauthed_client.get(
+        "/api/v1/accounts", headers={"Authorization": "Bearer xxx.yyy.zzz"}
+    )
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
