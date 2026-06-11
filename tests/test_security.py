@@ -1,22 +1,4 @@
-"""Security-focused integration tests (S6-6): auth bypass + SQL injection.
-
-Covers the S6-6 DONE conditions: unauthenticated access to protected
-endpoints, a tampered/malformed JWT, and a SQL-injection-style payload in a
-path parameter.
-
-Some S6-6 "やること" items are already covered elsewhere and are
-intentionally NOT duplicated here:
-- Expired JWT -> 401: see
-  tests/test_auth_dependency.py::test_expired_token_returns_401
-- Auditor role on admin-only endpoints -> 403: see tests/test_rbac.py
-  (test_auditor_cannot_create_account, test_auditor_cannot_post_transaction)
-
-Note on DONE-condition wording: the Notion DONE condition for "tampered JWT"
-says 403, but app/core/deps.py raises 401 for any JWTError (signature or
-format errors) -- 403 is reserved for role checks (require_admin /
-require_auditor_or_admin). This file tests the actual behavior (401); no
-auth code was changed (out of scope per "やらないこと").
-"""
+"""Security-focused integration tests: auth bypass + SQL injection."""
 
 from __future__ import annotations
 
@@ -29,19 +11,15 @@ from httpx import AsyncClient
 # Unauthenticated access -> 401
 # ---------------------------------------------------------------------------
 
-# TODO: implement (hint: list (method, path, kwargs) tuples for the 4
-# protected endpoints from the Notion "やること" section:
-#   POST /api/v1/transactions, GET /api/v1/accounts/{id}/balance,
-#   GET /api/v1/ledger, POST /api/v1/accounts
-# - For POST endpoints, pass kwargs={"json": {}} -- auth must short-circuit
-#   before body validation, same as test_auditor_cannot_post_transaction
-#   in tests/test_rbac.py.
-# - For GET /accounts/{id}/balance, use any syntactically valid UUID string
-#   for {id} (the DB is never reached) and pass
-#   kwargs={"params": {"as_of": "2024-01-01T00:00:00"}} so the 401 isn't
-#   masked by a 422 on the missing required query param.)
 _PROTECTED_ENDPOINTS: list[tuple[str, str, dict[str, Any]]] = [
-    # ("POST", "/api/v1/transactions", {"json": {}}),
+    ("POST", "/api/v1/transactions", {"json": {}}),
+    (
+        "GET",
+        "/api/v1/accounts/00000000-0000-0000-0000-000000000000/balance",
+        {"params": {"as_of": "2024-01-01T00:00:00"}},
+    ),
+    ("GET", "/api/v1/ledger", {}),
+    ("POST", "/api/v1/accounts", {"json": {}}),
 ]
 
 
@@ -51,9 +29,8 @@ async def test_unauthenticated_request_to_protected_endpoint_returns_401(
     unauthed_client: AsyncClient, method: str, path: str, kwargs: dict[str, Any]
 ) -> None:
     """A request with no Authorization header to a protected endpoint must return 401."""
-    # TODO: implement (hint: response = await unauthed_client.request(method, path, **kwargs);
-    # assert response.status_code == 401)
-    ...
+    response = await unauthed_client.request(method, path, **kwargs)
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
