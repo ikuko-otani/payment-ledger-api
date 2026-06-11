@@ -57,8 +57,9 @@ async def test_sql_injection_in_account_id_path_param_returns_422(
     async_client: AsyncClient,
 ) -> None:
     """A SQLi-style payload as the account_id path param must fail UUID validation (422)."""
-    # TODO: implement (hint: payload = "'; DROP TABLE accounts; --"
-    # GET f"/api/v1/accounts/{payload}/balance" with
-    # params={"as_of": "2024-01-01T00:00:00"} via async_client
-    # (already authenticated as admin); assert response.status_code == 422)
-    ...
+    payload = "'; DROP TABLE accounts; --"
+    response = await async_client.get(
+        f"/api/v1/accounts/{payload}/balance",
+        params={"as_of": "2024-01-01T00:00:00"},
+    )
+    assert response.status_code == 422
