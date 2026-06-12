@@ -18,6 +18,8 @@ docs/learning-notes/s6-7-locust-docker-compose.md):
 from __future__ import annotations
 
 import os
+import uuid
+from datetime import UTC, date, datetime
 
 from locust import HttpUser, between, task
 
@@ -44,32 +46,33 @@ class LedgerUser(HttpUser):
 
     @task(7)
     def post_transaction(self) -> None:
-        # TODO: implement (hint: POST "/api/v1/transactions" with
-        #   headers={"Idempotency-Key": str(uuid.uuid4())} -- a fresh UUID
-        #   per call, otherwise the Redis-backed idempotency check (see
-        #   app/dependencies/idempotency.py) returns 409 on any retry.
-        #   json body (TransactionCreate shape):
-        #     {
-        #       "currency_code": "USD",
-        #       "description": "locust load test",
-        #       "transaction_date": <today as "YYYY-MM-DD">,
-        #       "entries": [
-        #         {"account_id": str(self.debit_account_id),
-        #          "direction": "debit", "amount": 1000, "currency": "USD"},
-        #         {"account_id": str(self.credit_account_id),
-        #          "direction": "credit", "amount": 1000, "currency": "USD"},
-        #       ],
-        #     }
-        #   Using "USD" for currency_code and entry currency avoids the
-        #   ExchangeRate lookup in transaction_service.py (USD is
-        #   BASE_CURRENCY).
-        #   You'll need: import uuid; from datetime import date)
-        ...
+        self.client.post(
+            "/api/v1/transactions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            json={
+                "currency_code": "USD",
+                "description": "locust load test",
+                "transaction_date": date.today().isoformat(),
+                "entries": [
+                    {
+                        "account_id": self.debit_account_id,
+                        "direction": "debit",
+                        "amount": 1000,
+                        "currency": "USD",
+                    },
+                    {
+                        "account_id": self.credit_account_id,
+                        "direction": "credit",
+                        "amount": 1000,
+                        "currency": "USD",
+                    },
+                ],
+            },
+        )
 
     @task(3)
     def get_balance(self) -> None:
-        # TODO: implement (hint: GET
-        #   f"/api/v1/accounts/{self.debit_account_id}/balance"
-        #   with params={"as_of": <current UTC time, ISO format>}.
-        #   You'll need: from datetime import UTC, datetime)
-        ...
+        self.client.get(
+            f"/api/v1/accounts/{self.debit_account_id}/balance",
+            params={"as_of": datetime.now(UTC).isoformat()},
+        )
