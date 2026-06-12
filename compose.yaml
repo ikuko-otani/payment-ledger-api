@@ -54,5 +54,21 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
+  # 💡 S6-7: load test runner. Excluded from normal `docker compose up` via
+  #    `profiles` -- start explicitly with `--profile loadtest`.
+  locust:
+    image: locustio/locust:2.32.4
+    profiles: [loadtest]
+    ports:
+      - "8089:8089" # Web UI
+    depends_on:
+      - api
+    environment:
+      LOCUST_ADMIN_EMAIL: ${LOCUST_ADMIN_EMAIL:-admin@example.com}
+      LOCUST_ADMIN_PASSWORD: ${LOCUST_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - ./locustfile.py:/mnt/locust/locustfile.py:ro
+    command: -f /mnt/locust/locustfile.py --host http://api:8000
+
 volumes:
   pgdata:
