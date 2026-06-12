@@ -168,15 +168,194 @@ enough that it doesn't warrant a tech-debt entry.
 
 ---
 
+### Step 4 — 100-user baseline run discovers TD-026 (connection pool exhaustion)
+
+First headless run:
+
+```bash
+docker compose --profile loadtest run --rm locust -f /mnt/locust/locustfile.py \
+  --host http://api:8000 --headless -u 100 -r 10 -t 60s \
+  --csv=/mnt/locust/docs/loadtest/result_100users
+```
+
+Result: 4.88% error rate (2/41 `/auth/login` requests failed), aggregated
+p99 ≈ 48s. The failures were
+`sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached,
+connection timed out, timeout 30`.
+
+**Root cause**: `app/db/session.py`'s `create_async_engine(...)` had no
+`pool_size`/`max_overflow`, so SQLAlchemy's defaults applied
+(`pool_size=5, max_overflow=10` → 15 connections max). With 100 users
+ramping up in 10s, `/auth/login` (the first DB call in `on_start`) blew
+through that ceiling. `SHOW max_connections` confirmed PostgreSQL allows 100
+— plenty of headroom for a larger pool.
+
+**Fix (TD-026)**: set `pool_size=20, max_overflow=30` in `app/db/session.py`.
+
+### Step 5 — Re-run after TD-026; discover TD-027 (bcrypt blocks the event loop)
+
+Re-running the identical 100-user test: error rate dropped 4.88% → 0%
+(TD-026 confirmed). But aggregated p99 got slightly *worse* (48s → 52s) —
+more requests now survived long enough to queue instead of failing early on
+a pool timeout.
+
+**Root cause**: `verify_password` (`app/core/security.py`, wraps
+`bcrypt.checkpw`) was called directly inside `async def login` without
+`asyncio.to_thread`. Each bcrypt check (CPU-bound, ~250ms) blocked FastAPI's
+single event loop — **all** concurrent requests (not just other logins)
+queued behind it. Evidence: only 9/100 simulated users got past `on_start`
+within the 60s window; `post_transaction` recorded zero requests.
+
+**Fix (TD-027)**: wrapped `verify_password`/`get_password_hash`
+(`app/core/security.py`) in `await asyncio.to_thread(...)`; updated call
+sites in `app/api/v1/routes/auth.py`, `app/services/user_service.py`,
+`tests/conftest.py`.
+
+### Step 6 — Re-run after TD-027; discover TD-028 (single-process dev server)
+
+Re-running again: only a marginal change (login p99 52s → 50s, total
+requests 118 → 145).
+
+💡 Both TD-026 and TD-027 fixes were correct and necessary (eliminated 500
+errors; freed the event loop from bcrypt) — but the *aggregate* p99 barely
+moved, which signalled the real ceiling was elsewhere.
+
+**Root cause**: load tests run against `fastapi dev app/main.py` — FastAPI's
+**development** server: a single process, single event loop, with
+`--reload`/WatchFiles enabled. Even `GET /api/v1/accounts` (no bcrypt, no
+unusually heavy I/O) showed p99 ≈ 28s at 100 users, confirming the bottleneck
+is raw single-process request-handling capacity, not the DB pool or bcrypt.
+
+Registered as **TD-028** (fix candidates: run via `uvicorn --workers N` or
+`fastapi run`, ideally as a separate compose profile so the normal
+`fastapi dev --reload` workflow is unaffected).
+
+### Step 7 — Verify TD-028 with a one-off `uvicorn --workers 4` experiment
+
+To test the hypothesis without permanently changing `compose.yaml` /
+`Dockerfile`:
+
+```bash
+docker compose stop api
+docker compose run --rm --no-deps --service-ports --name api-multiworker api \
+  uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+⚠️ `uv run --no-dev` (not `--no-sync`) was required — the image's baked
+`.venv` was missing production dependencies (`opentelemetry`, `cryptography`,
+`grpcio`, 30 packages total) that had been added to `pyproject.toml` after
+the last `docker compose build`. `--no-dev` synced those in without pulling
+in dev-only deps (mypy/ruff).
+
+Re-running the identical 100-user test against the 4-worker server:
+
+| Workers | Requests | Failures | Req/s | Aggregated p99 | Login p99 |
+|---------|----------|----------|-------|-----------------|-----------|
+| 1 (dev) | 145      | 0 (0%)   | ~2.4  | 50s             | 50s       |
+| 4       | 976      | 7 (0.7%) | 17.30 | 23s             | 25s       |
+
+~6.7x more requests, p99 roughly halved → **TD-028 confirmed**: the dev
+server's single-process model was the dominant bottleneck all along.
+
+But this run also surfaced 7 new failures:
+`psycopg.OperationalError: ... FATAL: sorry, too many clients already`.
+
+### Step 8 — TD-029: per-worker connection pool sizing
+
+`app/db/session.py`'s `pool_size=20, max_overflow=30` (TD-026) is applied
+**per worker process**, not per application. With 4 workers, the
+theoretical connection ceiling is 4 × (20 + 30) = 200 — but PostgreSQL
+`max_connections=100`.
+
+💡 This is the same "per-process setting × N workers" trap as PHP-FPM's
+`pm.max_children` × per-child DB connections needing to stay under the
+database's connection limit.
+
+Registered as **TD-029** (Medium). Fix candidates: (1) divide
+`pool_size`/`max_overflow` by worker count, (2) make pool sizing
+env-configurable, (3) raise `max_connections`. Deferred to a future goal —
+fixing TD-028 without TD-029 would reintroduce connection errors under load.
+
+### Step 9 — Restore `api`, then run the official 300/500-user measurements
+
+After the experiment, `api-multiworker` was removed and `api` restored via
+`docker compose up -d api` (back to `fastapi dev` + WatchFiles).
+
+⚠️ The first 300-user attempt was contaminated: `docker compose --profile
+loadtest run --rm locust ...` (without `--no-deps`) triggered a
+`Container ... Recreate` of `api-1` (config mismatch left over from the
+experiment), causing a ~15-30s `uv run` dev-dependency sync mid-test — the
+first wave of simulated users got `on_start login failed (0)` (connection
+refused). That run was discarded and re-run with `--no-deps`.
+
+**Decision** (user-confirmed): run the official 300/500-user measurements
+against the normal single-process dev server (no `compose.yaml`/`Dockerfile`
+changes), documenting TD-028/TD-029 as known limitations with fixes deferred
+to a future goal — staying within the goal's time-box.
+
+Final results across all three concurrency levels (single-process dev
+server, post TD-026/TD-027 fixes):
+
+| Users | Requests | Failures | Req/s | Aggregated p99 | Login p99 |
+|-------|----------|----------|-------|-----------------|-----------|
+| 100   | 133      | 0 (0%)   | 2.43  | 49s             | 49s       |
+| 300   | 373      | 0 (0%)   | 6.56  | 51s             | 52s       |
+| 500   | 542      | 0 (0%)   | 9.61  | 51s             | 53s       |
+
+0% errors at all three levels. Throughput scales roughly with user count,
+but p99 plateaus near the 60s test window — the single process saturates
+well before 100 users, so additional load mostly adds queueing rather than
+additional failures.
+
+---
+
 ## Key takeaways
 
-_(to be filled in at goal closeout per CLAUDE.md 8.4)_
+- **What I learned**: performance bottlenecks come in layers. Fixing the
+  connection pool (TD-026) revealed the bcrypt event-loop block (TD-027);
+  fixing that revealed the single-process dev server (TD-028); verifying
+  that revealed per-worker pool sizing (TD-029). Each fix was individually
+  correct and necessary, even though the *aggregate* p99 barely moved until
+  the real ceiling (process count) was addressed. I also learned that
+  per-process settings like SQLAlchemy's `pool_size`/`max_overflow` multiply
+  by worker count — a value that's safe for one process can exceed a shared
+  limit (PostgreSQL `max_connections`) once you add more workers.
+
+- **What I would do differently**: I'd run a quick multi-worker smoke test
+  earlier in the goal, since the dev-server bottleneck (TD-028) ended up
+  dominating all three other findings — TD-026/TD-027's real-world impact
+  only becomes visible once TD-028 is also addressed. I'd also default to
+  `--no-deps` on any `docker compose run` against a service that already has
+  a running container, to avoid the "Recreate" contamination from Step 9.
+
+- **What surprised me**: how flat the aggregated p99 stayed (49s → 51s → 51s)
+  across 100/300/500 users on the single-process server — once the process is
+  saturated, adding more users barely changes the tail latency, it just
+  queues more requests within the same 60s window. I was also surprised by
+  the `uv run --no-dev` vs `--no-sync` distinction: `--no-sync` skipped
+  syncing entirely and left newly-added production dependencies missing from
+  `.venv`, while `--no-dev` synced production deps (without dev tooling).
+
+- **Worth remembering for future goals**: TD-028 (multi-worker deployment)
+  and TD-029 (per-worker pool sizing) are linked — any future goal that adopts
+  `uvicorn --workers N` must divide/configure the connection pool in the same
+  change, or it will reintroduce `too many clients already` errors. Also:
+  `docker compose run --rm --no-deps --service-ports --name <name> <service>
+  <cmd>` is the safe pattern for one-off experiments against an
+  already-running compose stack.
 
 ---
 
 ## Related documents
 
 - `docs/learning-notes/s6-7-locust-docker-compose.md` — S6-7 scaffold (locustfile.py, compose.yaml)
-- `docs/tech-debt.md` — TD-024 (entry/account currency mismatch), TD-025 (missing ORDER BY)
+- `docs/tech-debt.md` — TD-024 (entry/account currency mismatch), TD-025 (missing ORDER BY),
+  TD-026 (connection pool sizing), TD-027 (bcrypt blocks event loop),
+  TD-028 (single-process dev server bottleneck), TD-029 (per-worker pool sizing)
 - `app/services/transaction_service.py`, `app/services/balance.py` — TD-024 context
 - `app/api/v1/routes/accounts.py`, `app/api/v1/routes/transactions.py`, `app/services/ledger_service.py` — TD-025 context
+- `app/db/session.py` — TD-026 (`pool_size`/`max_overflow`), TD-029 context
+- `app/core/security.py`, `app/api/v1/routes/auth.py`, `app/services/user_service.py` — TD-027 context
+- `README.md` — Performance section (100/300/500-user results, multi-worker comparison)
+- `docs/loadtest/result_100users_*.csv`, `result_100users_multiworker_*.csv`,
+  `result_300users_*.csv`, `result_500users_*.csv` — raw locust CSV results
