@@ -1,4 +1,4 @@
-"""Locust load test scenarios for payment-ledger-api (S6-7).
+"""Locust load test scenarios for payment-ledger-api.
 
 Run via `docker compose --profile loadtest up locust` (Web UI on :8089) or
 `docker compose --profile loadtest run --rm locust --headless ...` (CLI).
@@ -13,10 +13,6 @@ Setup required before running against real data (see
 docs/learning-notes/s6-7-locust-docker-compose.md):
   - An ADMIN-role user must exist (LOCUST_ADMIN_EMAIL / LOCUST_ADMIN_PASSWORD).
   - At least 2 accounts must exist (created via POST /accounts as that admin).
-
-Note: actual load test execution & measurement is out of scope for S6-7
-(see S6-8). This file only needs to start cleanly under
-`docker compose --profile loadtest up`.
 """
 
 from __future__ import annotations
@@ -35,18 +31,16 @@ class LedgerUser(HttpUser):
     wait_time = between(1, 3)
 
     def on_start(self) -> None:
-        # TODO: implement (hint: locust calls on_start() once per simulated
-        # user, before any @task runs -- the natural place to "log in".
-        #   1. POST "/api/v1/auth/login" with json=
-        #      {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        #   2. token = response.json()["access_token"]
-        #   3. self.client.headers["Authorization"] = f"Bearer {token}"
-        #      (self.client is a requests.Session-like object -- headers set
-        #      here are sent on every later request from this user)
-        #   4. GET "/api/v1/accounts" (now authenticated) and store the
-        #      first two account ids as self.debit_account_id and
-        #      self.credit_account_id for use in the tasks below.)
-        ...
+        response = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        )
+        token = response.json()["access_token"]
+        self.client.headers["Authorization"] = f"Bearer {token}"
+
+        accounts = self.client.get("/api/v1/accounts").json()
+        self.debit_account_id = accounts[0]["id"]
+        self.credit_account_id = accounts[1]["id"]
 
     @task(7)
     def post_transaction(self) -> None:
