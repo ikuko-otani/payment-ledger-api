@@ -32,3 +32,57 @@ Open the Jaeger UI at http://localhost:16686.
 
 - Jaeger runs as jaegertracing/all-in-one (development only — traces are stored in memory and lost on container restart).
 - The API sends traces via OTLP/gRPC to jaeger:4317 (configured in .env as OTEL_EXPORTER_OTLP_ENDPOINT).
+
+## Performance
+
+Load tested with [Locust](https://locust.io/) (`locustfile.py`, see
+`docker compose --profile loadtest`). The scenario simulates an
+authenticated client mixing transaction writes and balance reads:
+
+- `POST /api/v1/transactions` (weight 7) — post a balanced double-entry transaction
+- `GET /api/v1/accounts/{id}/balance` (weight 3) — read account balance
+
+### Results (dev server, single process)
+
+All runs use `fastapi dev app/main.py` (the default `Dockerfile` CMD), 60s duration:
+
+| Users | Requests | Failures | Req/s | Aggregated p99 | Login p99 |
+|-------|----------|----------|-------|-----------------|-----------|
+| 100   | 133      | 0 (0%)   | 2.43  | 49s             | 49s       |
+| 300   | 373      | 0 (0%)   | 6.56  | 51s             | 52s       |
+| 500   | 542      | 0 (0%)   | 9.61  | 51s             | 53s       |
+
+- 0% error rate at all three concurrency levels (after fixing connection-pool
+  exhaustion and a blocking bcrypt call — see TD-026/TD-027 in `docs/tech-debt.md`).
+- Requests/s scales roughly with user count, but p99 latency plateaus around
+  50-53s — a single Python process can only handle a handful of requests at a
+  time, so additional users mostly wait in queue rather than fail outright.
+
+### Multi-worker comparison (experimental)
+
+To confirm the single-process dev server was the bottleneck, the 100-user
+scenario was re-run once against `uvicorn app.main:app --workers 4` (a one-off
+experiment, not the default deployment):
+
+| Workers | Requests | Failures | Req/s | Aggregated p99 | Login p99 |
+|---------|----------|----------|-------|-----------------|-----------|
+| 1 (dev) | 133      | 0 (0%)   | 2.43  | 49s             | 49s       |
+| 4       | 976      | 7 (0.7%) | 17.30 | 23s             | 25s       |
+
+Throughput improved ~6.7x and latency dropped by more than half, confirming
+the dev server's single-process model is the dominant bottleneck. The small
+number of failures (`FATAL: sorry, too many clients already`) showed that
+the SQLAlchemy connection pool size must be divided across worker processes
+in a multi-worker deployment — tracked as TD-029.
+
+### Known limitations / follow-ups
+
+- **TD-028**: production deployment should run multiple worker processes
+  (`uvicorn --workers N` / `fastapi run`) instead of `fastapi dev`.
+- **TD-029**: when moving to multi-worker, `pool_size`/`max_overflow` must be
+  divided by worker count (or made configurable) to stay under PostgreSQL's
+  `max_connections`.
+
+Raw results: `docs/loadtest/result_100users_*.csv`,
+`result_100users_multiworker_*.csv`, `result_300users_*.csv`,
+`result_500users_*.csv`.
