@@ -138,6 +138,23 @@ async def create_transaction(
         )
 
     # ------------------------------------------------------------------
+    # Validate: each entry's currency must match its account's currency (TD-024)
+    # ------------------------------------------------------------------
+    mismatched = [e for e in payload.entries if e.currency != found_ids[e.account_id]]
+    if mismatched:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Entry currency does not match account currency: "
+                + ", ".join(
+                    f"account_id={e.account_id} entry_currency={e.currency} "
+                    f"account_currency={found_ids[e.account_id]}"
+                    for e in mismatched
+                )
+            ),
+        )
+
+    # ------------------------------------------------------------------
     # Validate: double-entry balance (amounts are now int — minor units)
     # ------------------------------------------------------------------
     debit_sum = sum(e.amount for e in payload.entries if e.direction == Direction.DEBIT)
