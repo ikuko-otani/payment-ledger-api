@@ -256,7 +256,7 @@ async def _seed_user(
     async with session_factory() as session:
         user = User(
             email=email,
-            hashed_password=get_password_hash(password),
+            hashed_password=await get_password_hash(password),
             role=role,
         )
         session.add(user)

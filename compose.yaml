@@ -64,10 +64,11 @@ services:
     depends_on:
       - api
     environment:
-      LOCUST_ADMIN_EMAIL: ${LOCUST_ADMIN_EMAIL:-admin@example.com}
-      LOCUST_ADMIN_PASSWORD: ${LOCUST_ADMIN_PASSWORD:-changeme}
+      LOCUST_ADMIN_EMAIL: ${LOCUST_ADMIN_EMAIL:?Set LOCUST_ADMIN_EMAIL in .env (see .env.example)}
+      LOCUST_ADMIN_PASSWORD: ${LOCUST_ADMIN_PASSWORD:?Set LOCUST_ADMIN_PASSWORD in .env (see .env.example)}
     volumes:
       - ./locustfile.py:/mnt/locust/locustfile.py:ro
+      - ./docs/loadtest:/mnt/locust/docs/loadtest
     command: -f /mnt/locust/locustfile.py --host http://api:8000
 
 volumes:

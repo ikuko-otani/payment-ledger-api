@@ -25,7 +25,7 @@ async def create_user(
         )
 
     # Hash the password
-    hashed = get_password_hash(payload.password)
+    hashed = await get_password_hash(payload.password)
 
     # Create User ORM object, add to session, flush, refresh
     user = User(email=payload.email, hashed_password=hashed, role=role)

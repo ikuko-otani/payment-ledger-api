@@ -37,12 +37,19 @@ class LedgerUser(HttpUser):
             "/api/v1/auth/login",
             json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"on_start login failed ({response.status_code}): "
+                f"check LOCUST_ADMIN_EMAIL/LOCUST_ADMIN_PASSWORD in .env "
+                f"against an existing ADMIN user. body={response.text}"
+            )
         token = response.json()["access_token"]
         self.client.headers["Authorization"] = f"Bearer {token}"
 
         accounts = self.client.get("/api/v1/accounts").json()
-        self.debit_account_id = accounts[0]["id"]
-        self.credit_account_id = accounts[1]["id"]
+        usd_accounts = [a for a in accounts if a["currency"] == "USD"]
+        self.debit_account_id = usd_accounts[0]["id"]
+        self.credit_account_id = usd_accounts[1]["id"]
 
     @task(7)
     def post_transaction(self) -> None:
