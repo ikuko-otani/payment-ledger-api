@@ -208,3 +208,32 @@ To get `on_start` to succeed (needed before real measurements in S6-8):
 - `locustfile.py`, `compose.yaml` — implementation
 - `app/dependencies/idempotency.py` — idempotency-key mechanism
 - `docs/tech-debt.md` — TD-015 (balance cache-hit latency)
+
+---
+
+## Key takeaways
+
+- I learned that a locust scenario is just "one virtual user's behaviour"
+  (`on_start` + weighted `@task`s) — locust itself handles concurrency,
+  pacing (`wait_time`), and result aggregation, so I didn't need `TaskSet`
+  for a scenario this small.
+- I learned that `profiles: [loadtest]` is the right way to add an
+  occasionally-used service to `compose.yaml` without changing the behaviour
+  of a normal `docker compose up` — the same pattern could apply to other
+  optional tooling later.
+- I would double-check Git Bash path handling earlier next time. The
+  `/mnt/locust/locustfile.py` argument got silently rewritten to a Windows
+  path until I added `MSYS_NO_PATHCONV=1` — worth remembering as a general
+  rule for any Unix-style path passed to `docker compose run` from Git Bash,
+  not just this command.
+- I was surprised that locust treated the `on_start` `401`/`KeyError`
+  (missing seed admin user) as a normal per-user failure and still completed
+  the 10s run with a full summary report and clean exit, rather than crashing
+  the whole process. That gave me confidence the headless command itself is
+  correct, independent of S6-8's seed-data work.
+- For future goals: fetching reference IDs dynamically in `on_start`
+  (`GET /api/v1/accounts`) instead of hardcoding kept the locustfile usable
+  across environments — a pattern worth reusing for other scenario files.
+- Worth remembering for S6-8: the ADMIN-user/account setup steps are already
+  written down in this file's "Setup notes for S6-8" section, so I don't need
+  to re-derive them.
