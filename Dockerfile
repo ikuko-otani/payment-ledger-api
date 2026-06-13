@@ -4,10 +4,11 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# ← uv.lock も一緒にコピーする
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen
 
 COPY . .
 
-CMD ["uv", "run", "fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]
+# production-equivalent default — multi-worker, no auto-reload.
+# Local development overrides this via compose.yaml's `command:` (fastapi dev).
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
