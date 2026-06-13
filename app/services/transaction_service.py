@@ -104,13 +104,13 @@ async def create_transaction(
     # ------------------------------------------------------------------
     account_ids = {e.account_id for e in payload.entries}
     result = await db.execute(
-        select(Account).where(
+        select(Account.id, Account.currency).where(
             Account.id.in_(account_ids),
             Account.is_active.is_(True),
         )
     )
-    found_ids = {row.id for row in result.scalars().all()}
-    missing = account_ids - found_ids
+    found_ids = {account_id: currency for account_id, currency in result.all()}
+    missing = account_ids - found_ids.keys()
     if missing:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -135,6 +135,23 @@ async def create_transaction(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"All entries must use the same currency, got: {sorted(currencies)}",
+        )
+
+    # ------------------------------------------------------------------
+    # Validate: each entry's currency must match its account's currency (TD-024)
+    # ------------------------------------------------------------------
+    mismatched = [e for e in payload.entries if e.currency != found_ids[e.account_id]]
+    if mismatched:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Entry currency does not match account currency: "
+                + ", ".join(
+                    f"account_id={e.account_id} entry_currency={e.currency} "
+                    f"account_currency={found_ids[e.account_id]}"
+                    for e in mismatched
+                )
+            ),
         )
 
     # ------------------------------------------------------------------

@@ -32,6 +32,7 @@ async def list_transactions(
     result = await db.execute(
         select(Transaction)
         .options(selectinload(Transaction.entries))
+        .order_by(Transaction.transaction_date.desc(), Transaction.id)
         .offset(offset)
         .limit(limit)
     )

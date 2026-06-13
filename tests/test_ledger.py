@@ -116,20 +116,30 @@ async def test_get_ledger_currency_filter_returns_only_matching_currency(
     """currency_code filter must exclude entries of other currencies."""
     await _seed_eur_rate(db_session, "2026-04-01")
 
-    debit = await _seed_account(db_session, "Cash-L2", "1101")
-    credit = await _seed_account(db_session, "Revenue-L2", "4001", AccountType.REVENUE)
+    debit_usd = await _seed_account(db_session, "Cash-L2-USD", "1101")
+    credit_usd = await _seed_account(
+        db_session, "Revenue-L2-USD", "4001", AccountType.REVENUE
+    )
+    debit_eur = await _seed_account(db_session, "Cash-L2-EUR", "1105", currency="EUR")
+    credit_eur = await _seed_account(
+        db_session, "Revenue-L2-EUR", "4005", AccountType.REVENUE, "EUR"
+    )
 
     # USD transaction
     resp_usd = await async_client.post(
         "/api/v1/transactions",
-        json=_tx_payload(str(debit.id), str(credit.id), 300, "2026-04-01", "USD"),
+        json=_tx_payload(
+            str(debit_usd.id), str(credit_usd.id), 300, "2026-04-01", "USD"
+        ),
     )
     assert resp_usd.status_code == 201
 
     # EUR transaction
     resp_eur = await async_client.post(
         "/api/v1/transactions",
-        json=_tx_payload(str(debit.id), str(credit.id), 110, "2026-04-01", "EUR"),
+        json=_tx_payload(
+            str(debit_eur.id), str(credit_eur.id), 110, "2026-04-01", "EUR"
+        ),
     )
     assert resp_eur.status_code == 201
 
@@ -238,10 +248,10 @@ async def test_get_ledger_date_boundary(
     returned_tx_ids = {item["transaction"]["id"] for item in resp.json()}
 
     if should_be_included:
-        assert tx_id in returned_tx_ids, (
-            f"Expected tx on {tx_date} to be included with {query_params}"
-        )
+        assert (
+            tx_id in returned_tx_ids
+        ), f"Expected tx on {tx_date} to be included with {query_params}"
     else:
-        assert tx_id not in returned_tx_ids, (
-            f"Expected tx on {tx_date} to be excluded with {query_params}"
-        )
+        assert (
+            tx_id not in returned_tx_ids
+        ), f"Expected tx on {tx_date} to be excluded with {query_params}"

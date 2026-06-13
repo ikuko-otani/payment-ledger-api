@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -110,3 +111,31 @@ async def test_duplicate_account_code_raises_integrity_error(
 
     with pytest.raises(IntegrityError):
         await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_list_accounts_returns_rows_ordered_by_code(
+    async_client: AsyncClient,
+) -> None:
+    """GET /accounts must return rows ordered by code, not insertion order (TD-025)."""
+    for code, name in [
+        ("3000", "Acct-3000"),
+        ("1000", "Acct-1000"),
+        ("2000", "Acct-2000"),
+    ]:
+        resp = await async_client.post(
+            "/api/v1/accounts",
+            json={
+                "code": code,
+                "name": name,
+                "account_type": "asset",
+                "currency": "EUR",
+            },
+        )
+        assert resp.status_code == 201
+
+    response = await async_client.get("/api/v1/accounts")
+    assert response.status_code == 200
+    codes = [item["code"] for item in response.json()]
+
+    assert codes == ["1000", "2000", "3000"]

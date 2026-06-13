@@ -414,3 +414,41 @@ async def test_mixed_currency_entries_raises_http_422(
 
     assert exc_info.value.status_code == 422
     assert "currency" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_entry_currency_mismatched_with_account_returns_422(
+    db_session: AsyncSession,
+) -> None:
+    """Entry currency must match its account's currency (TD-024)."""
+    debit = await _create_account(
+        db_session, "Cash-EUR-Acct", AccountType.ASSET, code="1140", currency="EUR"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-EUR-Acct", AccountType.REVENUE, code="4040", currency="EUR"
+    )
+
+    payload = TransactionCreate(
+        description="Currency mismatch",
+        transaction_date=date(2024, 1, 1),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=1000,
+                currency="USD",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=1000,
+                currency="USD",
+            ),
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+
+    assert exc_info.value.status_code == 422
+    assert "currency" in str(exc_info.value.detail).lower()

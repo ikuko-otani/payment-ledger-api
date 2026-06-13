@@ -275,3 +275,53 @@ async def test_post_then_get_shows_persisted_record(
     assert get_resp.status_code == 200
     ids_in_list = [item["id"] for item in get_resp.json()]
     assert created_id in ids_in_list
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_ordered_by_transaction_date_desc(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /transactions must be ordered by transaction_date desc (TD-025)."""
+    debit_id = await _seed_account(
+        db_session, "Cash-Order", AccountType.ASSET, code="1120"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-Order", AccountType.REVENUE, code="4020"
+    )
+
+    def _payload(tx_date: str, description: str) -> dict:
+        return {
+            "description": description,
+            "transaction_date": tx_date,
+            "entries": [
+                {
+                    "account_id": debit_id,
+                    "direction": "debit",
+                    "amount": 10,
+                    "currency": "EUR",
+                },
+                {
+                    "account_id": credit_id,
+                    "direction": "credit",
+                    "amount": 10,
+                    "currency": "EUR",
+                },
+            ],
+        }
+
+    for tx_date, description in [
+        ("2024-01-01", "oldest"),
+        ("2024-03-01", "newest"),
+        ("2024-02-01", "middle"),
+    ]:
+        resp = await async_client.post(
+            "/api/v1/transactions", json=_payload(tx_date, description)
+        )
+        assert resp.status_code == 201
+
+    response = await async_client.get("/api/v1/transactions")
+    assert response.status_code == 200
+    dates = [item["transaction_date"] for item in response.json()]
+
+    assert dates == ["2024-03-01", "2024-02-01", "2024-01-01"]

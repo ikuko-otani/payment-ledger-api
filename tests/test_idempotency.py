@@ -193,10 +193,18 @@ async def test_failed_transaction_releases_idempotency_key_for_retry(
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
-        db_session, name="Cash4", account_type=AccountType.ASSET, code="1103"
+        db_session,
+        name="Cash4",
+        account_type=AccountType.ASSET,
+        code="1103",
+        currency="USD",
     )
     acc_credit = await create_account(
-        db_session, name="Revenue4", account_type=AccountType.REVENUE, code="4003"
+        db_session,
+        name="Revenue4",
+        account_type=AccountType.REVENUE,
+        code="4003",
+        currency="USD",
     )
     key = str(uuid.uuid4())
 
@@ -260,10 +268,18 @@ async def test_balance_reflects_new_transaction_after_commit(
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
-        db_session, name="Cash5", account_type=AccountType.ASSET, code="1104"
+        db_session,
+        name="Cash5",
+        account_type=AccountType.ASSET,
+        code="1104",
+        currency="USD",
     )
     acc_credit = await create_account(
-        db_session, name="Revenue5", account_type=AccountType.REVENUE, code="4004"
+        db_session,
+        name="Revenue5",
+        account_type=AccountType.REVENUE,
+        code="4004",
+        currency="USD",
     )
 
     # Step 1: POST a transaction (debit 500 against acc_debit)

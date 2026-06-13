@@ -26,7 +26,7 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 @router.get("", response_model=list[AccountRead])
 async def list_accounts(db: DbDep, _current_user: AuditorOrAdminUser) -> list[Account]:
-    result = await db.execute(select(Account))
+    result = await db.execute(select(Account).order_by(Account.code))
     return list(result.scalars().all())
 
 
