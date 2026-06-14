@@ -248,10 +248,10 @@ async def test_get_ledger_date_boundary(
     returned_tx_ids = {item["transaction"]["id"] for item in resp.json()}
 
     if should_be_included:
-        assert (
-            tx_id in returned_tx_ids
-        ), f"Expected tx on {tx_date} to be included with {query_params}"
+        assert tx_id in returned_tx_ids, (
+            f"Expected tx on {tx_date} to be included with {query_params}"
+        )
     else:
-        assert (
-            tx_id not in returned_tx_ids
-        ), f"Expected tx on {tx_date} to be excluded with {query_params}"
+        assert tx_id not in returned_tx_ids, (
+            f"Expected tx on {tx_date} to be excluded with {query_params}"
+        )
