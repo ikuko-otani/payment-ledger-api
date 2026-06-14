@@ -13,8 +13,8 @@ engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=30,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
 )
 
 # expire_on_commit=False が非同期では必須

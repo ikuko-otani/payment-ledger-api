@@ -33,21 +33,23 @@ from app.services.audit_service import log_action
 BASE_CURRENCY = "USD"
 
 
-async def _get_converted_amount_usd(
+async def _resolve_usd_conversion_rate(
     db: AsyncSession,
-    amount: int,
     currency_code: str,
     transaction_date: date,
-) -> int:
-    """Return the USD-cent equivalent of `amount` in `currency_code`.
+) -> Decimal:
+    """Resolve the conversion rate from currency_code to USD for transaction_date.
 
-    - If currency_code == BASE_CURRENCY: returns amount unchanged (identity).
+    - If currency_code == BASE_CURRENCY: returns Decimal("1") (identity, no query).
     - Otherwise: looks up ExchangeRate(from=currency_code, to=USD, date=transaction_date)
-      and applies ROUND_HALF_UP rounding.
-    - Raises HTTP 422 if no matching ExchangeRate row exists.
+      and returns its `rate`.
+    - Raises HTTP 422 if currency_code/USD is unknown, or no matching rate exists.
+
+    Called once per transaction (not once per entry) -- currency_code and
+    transaction_date are transaction-level values shared by every entry.
     """
     if currency_code == BASE_CURRENCY:
-        return amount
+        return Decimal("1")
 
     # Resolve from_currency UUID
     from_result = await db.execute(
@@ -86,9 +88,12 @@ async def _get_converted_amount_usd(
             ),
         )
 
-    converted = (Decimal(amount) * exchange_rate.rate).quantize(
-        Decimal("1"), rounding=ROUND_HALF_UP
-    )
+    return exchange_rate.rate
+
+
+def _convert_amount_usd(amount: int, rate: Decimal) -> int:
+    """Apply a USD conversion rate to a minor-unit amount (no DB access)."""
+    converted = (Decimal(amount) * rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return int(converted)
 
 
@@ -181,13 +186,13 @@ async def create_transaction(
     await db.flush()
 
     # ------------------------------------------------------------------
-    # Convert each entry amount to USD cents at write time
+    # Resolve USD conversion rate once per transaction
     # ------------------------------------------------------------------
+    conversion_rate = await _resolve_usd_conversion_rate(
+        db, payload.currency_code, payload.transaction_date
+    )
     converted_amounts = [
-        await _get_converted_amount_usd(
-            db, entry.amount, payload.currency_code, payload.transaction_date
-        )
-        for entry in payload.entries
+        _convert_amount_usd(entry.amount, conversion_rate) for entry in payload.entries
     ]
 
     entries = [

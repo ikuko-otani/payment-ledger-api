@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import event, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.models.account import Account, AccountType
+from app.models.currency import Currency
 from app.models.entry import Direction
+from app.models.exchange_rate import ExchangeRate
 from app.models.transaction import Transaction
 from app.models.user import User, UserRole
 from app.schemas.transaction import EntryCreate, TransactionCreate
@@ -452,3 +455,103 @@ async def test_entry_currency_mismatched_with_account_returns_422(
 
     assert exc_info.value.status_code == 422
     assert "currency" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_non_usd_transaction_resolves_conversion_rate_once(
+    db_session: AsyncSession,
+    engine: AsyncEngine,
+) -> None:
+    """TD-030: conversion rate is resolved once per transaction, not once per entry.
+
+    Before the fix, _get_converted_amount_usd ran up to 3 queries
+    (currencies x2 + exchange_rates x1) PER ENTRY. With 4 entries that would
+    be up to 12 queries against currencies/exchange_rates. After the fix,
+    the rate is resolved once regardless of entry count -- at most 3.
+    """
+    eur = Currency(code="EUR", name="Euro", decimal_places=2)
+    usd = Currency(code="USD", name="US Dollar", decimal_places=2)
+    db_session.add_all([eur, usd])
+    await db_session.flush()
+
+    test_user_id = uuid.uuid4()
+    db_session.add(
+        User(
+            id=test_user_id,
+            email="td030-test@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+    )
+    await db_session.flush()
+
+    db_session.add(
+        ExchangeRate(
+            from_currency_id=eur.id,
+            to_currency_id=usd.id,
+            rate=Decimal("1.10"),
+            effective_date=date(2024, 1, 1),
+            created_by_id=test_user_id,
+        )
+    )
+    await db_session.commit()
+
+    debit = await _create_account(
+        db_session, "Cash-EUR-N1", AccountType.ASSET, code="1150"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-EUR-N1", AccountType.REVENUE, code="4050"
+    )
+
+    payload = TransactionCreate(
+        currency_code="EUR",
+        description="N+1 check",
+        transaction_date=date(2024, 1, 1),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=500,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=500,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=500,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=500,
+                currency="EUR",
+            ),
+        ],
+    )
+
+    statements: list[str] = []
+
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", _capture)
+    try:
+        tx = await create_transaction(db_session, payload, user_id=test_user_id)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", _capture)
+
+    conversion_queries = [
+        s
+        for s in statements
+        if "currencies" in s.lower() or "exchange_rates" in s.lower()
+    ]
+    assert len(conversion_queries) <= 3
+
+    # 500 * 1.10 = 550, applied to every entry
+    assert all(e.converted_amount_usd == 550 for e in tx.entries)

@@ -12,9 +12,17 @@ services:
         condition: service_healthy
       jaeger:
         condition: service_started
-    # 💡 Mount local source into the container so code changes are reflected
-    #    without rebuilding the image. .venv is excluded to avoid overwriting
-    #    the packages installed during docker build.
+    # Dockerfile's CMD now runs the production-equivalent
+    # multi-worker server (uvicorn --workers 4, no auto-reload).
+    # For local development, override it with `fastapi dev` so
+    # WatchFiles hot-reload keeps working with the source bind mount
+    # below. To exercise the multi-worker command locally (e.g. for a
+    # locust run), comment out this `command:` line and run
+    # `docker compose up -d --build api`.
+    command: uv run fastapi dev app/main.py --host 0.0.0.0 --port 8000
+    # Mount local source into the container so code changes are reflected
+    # without rebuilding the image. .venv is excluded to avoid overwriting
+    # the packages installed during docker build.
     volumes:
       - .:/app
       - /app/.venv # anonymous volume: keeps the container's .venv intact
@@ -54,8 +62,8 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
-  # 💡 S6-7: load test runner. Excluded from normal `docker compose up` via
-  #    `profiles` -- start explicitly with `--profile loadtest`.
+  # Load test runner. Excluded from normal `docker compose up` via
+  # `profiles` -- start explicitly with `--profile loadtest`.
   locust:
     image: locustio/locust:2.32.4
     profiles: [loadtest]
