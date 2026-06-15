@@ -27,6 +27,6 @@ async def list_currencies(db: DbDep, _current_user: CurrentUser) -> list[Currenc
 async def post_currency(
     payload: CurrencyCreate,
     db: DbDep,
-    _current_user: AdminUser,
+    current_user: AdminUser,
 ) -> Currency:
-    return await create_currency(db, payload)
+    return await create_currency(db, payload, current_user)

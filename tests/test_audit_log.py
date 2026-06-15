@@ -98,6 +98,88 @@ async def test_create_account_writes_audit_log(
 
 
 @pytest.mark.asyncio
+async def test_create_currency_writes_audit_log(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    response = await async_client.post(
+        "/api/v1/currencies",
+        json={"code": "USD", "name": "US Dollar", "decimal_places": 2},
+    )
+    assert response.status_code == 201
+
+    result = await db_session.execute(select(AuditLog))
+    logs = result.scalars().all()
+    assert len(logs) == 1
+    assert logs[0].entity_type == "currency"
+    assert logs[0].action == "create"
+    assert logs[0].before_value is None
+    assert logs[0].after_value["code"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_create_exchange_rate_writes_audit_log(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    r_usd = await async_client.post(
+        "/api/v1/currencies",
+        json={"code": "USD", "name": "US Dollar", "decimal_places": 2},
+    )
+    r_eur = await async_client.post(
+        "/api/v1/currencies",
+        json={"code": "EUR", "name": "Euro", "decimal_places": 2},
+    )
+    usd_id = r_usd.json()["id"]
+    eur_id = r_eur.json()["id"]
+
+    response = await async_client.post(
+        "/api/v1/exchange-rates",
+        json={
+            "from_currency_id": usd_id,
+            "to_currency_id": eur_id,
+            "rate": "1.08000000",
+            "effective_date": "2024-01-01",
+        },
+    )
+    assert response.status_code == 201
+
+    result = await db_session.execute(
+        select(AuditLog).where(AuditLog.entity_type == "exchange_rate")
+    )
+    logs = result.scalars().all()
+    assert len(logs) == 1
+    assert logs[0].action == "create"
+    assert logs[0].before_value is None
+    assert logs[0].after_value["from_currency_id"] == usd_id
+
+
+@pytest.mark.asyncio
+async def test_register_user_writes_audit_log(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    response = await async_client.post(
+        "/api/v1/users",
+        json={"email": "audit-user@example.com", "password": "secret123"},
+    )
+    assert response.status_code == 201
+    new_user_id = response.json()["id"]
+
+    result = await db_session.execute(
+        select(AuditLog).where(AuditLog.entity_type == "user")
+    )
+    logs = result.scalars().all()
+    assert len(logs) == 1
+    assert logs[0].action == "create"
+    assert logs[0].before_value is None
+    assert logs[0].after_value["email"] == "audit-user@example.com"
+    # Self-registration: the audit row references the new user itself.
+    assert str(logs[0].user_id) == new_user_id
+    assert str(logs[0].entity_id) == new_user_id
+
+
+@pytest.mark.asyncio
 async def test_audit_failure_rolls_back_transaction(
     db_session: AsyncSession,
 ) -> None:

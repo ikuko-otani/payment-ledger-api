@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +12,7 @@ from app.core.exceptions import ConflictError
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate
+from app.services.audit_service import log_action
 
 _DUPLICATE_EMAIL_DETAIL = "Email already registered"
 
@@ -39,4 +42,21 @@ async def create_user(
         raise ConflictError(detail=_DUPLICATE_EMAIL_DETAIL) from e
 
     await db.refresh(user)
+
+    # Self-registration is unauthenticated, so there is no acting user other
+    # than the one being created -- the audit row references the new user itself.
+    after_value: dict[str, Any] = {
+        "id": str(user.id),
+        "email": user.email,
+        "role": user.role.value,
+    }
+    await log_action(
+        db,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+        action="create",
+        before=None,
+        after=after_value,
+    )
     return user
