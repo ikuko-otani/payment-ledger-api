@@ -7,10 +7,10 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.core.exceptions import ValidationError
 from app.models.account import Account, AccountType
 from app.models.currency import Currency
 from app.models.entry import Direction
@@ -124,7 +124,7 @@ async def test_unbalanced_transaction_raises_http_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
 
     assert exc_info.value.status_code == 422
@@ -262,7 +262,7 @@ async def test_unknown_account_id_raises_http_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
 
     assert exc_info.value.status_code == 422
@@ -298,7 +298,7 @@ async def test_all_debit_entries_raises_http_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
 
     assert exc_info.value.status_code == 422
@@ -335,7 +335,7 @@ async def test_all_credit_entries_raises_http_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
 
     assert exc_info.value.status_code == 422
@@ -377,7 +377,7 @@ async def test_inactive_account_raises_http_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
     assert exc_info.value.status_code == 422
 
@@ -412,7 +412,7 @@ async def test_mixed_currency_entries_raises_http_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
 
     assert exc_info.value.status_code == 422
@@ -450,7 +450,7 @@ async def test_entry_currency_mismatched_with_account_returns_422(
         ],
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError) as exc_info:
         await create_transaction(db_session, payload, user_id=uuid.uuid4())
 
     assert exc_info.value.status_code == 422
