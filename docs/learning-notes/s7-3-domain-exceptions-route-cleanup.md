@@ -564,6 +564,16 @@ uv run pytest -q
 grep -rn "from fastapi" app/services/
 ```
 
+```
+113 passed, 2 warnings in 194.86s (0:03:14)
+TOTAL  901  53  94%
+Required test coverage of 85% reached. Total coverage: 94.12%
+```
+
+(112 → 113 tests: +1 for TD-031's concurrency test. Coverage 93.43% → 94.12%.
+`grep -rn "from fastapi" app/services/` returns nothing — DONE condition 1
+satisfied.)
+
 ```bash
 git add docs/tech-debt.md && git commit -m "docs(tech-debt): move TD-019/022/031 to Resolved (S7-3)"
 git add docs/learning-notes/concepts/three-layer-architecture-route-vs-service.md && git commit -m "docs(s7-3): add concept note on route vs service layer split (TD-022)"
