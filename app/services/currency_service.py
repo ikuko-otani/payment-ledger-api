@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ConflictError
 from app.models.currency import Currency
 from app.models.exchange_rate import ExchangeRate
 from app.models.user import User
@@ -67,9 +67,8 @@ async def create_exchange_rate(
     try:
         await db.flush()
     except IntegrityError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Exchange rate for this currency pair and date already exists",
+        raise ConflictError(
+            detail="Exchange rate for this currency pair and date already exists"
         ) from e
     await db.refresh(exchange_rate)
     return exchange_rate

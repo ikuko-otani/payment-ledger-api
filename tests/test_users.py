@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.core.exceptions import ConflictError
 from app.models.user import User
+from app.schemas.user import UserCreate
+from app.services import user_service
 
 
 @pytest.mark.asyncio
@@ -50,3 +55,37 @@ async def test_register_user_password_is_hashed_in_db(
     user = result.scalar_one()
     assert user.hashed_password != "plaintext"
     assert user.hashed_password.startswith("$2b$")
+
+
+@pytest.mark.asyncio
+async def test_create_user_concurrent_duplicate_email_returns_conflict(
+    engine: AsyncEngine,
+) -> None:
+    """TOCTOU race (TD-031): two concurrent create_user calls with the same
+    email both pass the pre-check SELECT (neither has committed yet), so
+    both proceed to INSERT. The users.email UNIQUE constraint lets exactly
+    one succeed; the loser's flush() raises IntegrityError, which
+    create_user converts to ConflictError instead of a raw 500.
+    """
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    payload = UserCreate(email="race@example.com", password="secret123")
+
+    async def _attempt() -> User | ConflictError:
+        async with session_factory() as session:
+            try:
+                user = await user_service.create_user(session, payload)
+                await session.commit()
+                return user
+            except ConflictError as e:
+                await session.rollback()
+                return e
+
+    results = await asyncio.gather(_attempt(), _attempt())
+
+    successes = [r for r in results if isinstance(r, User)]
+    conflicts = [r for r in results if isinstance(r, ConflictError)]
+
+    assert len(successes) == 1
+    assert len(conflicts) == 1

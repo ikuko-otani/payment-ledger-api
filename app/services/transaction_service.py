@@ -15,11 +15,11 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import ValidationError
 from app.models.account import Account
 from app.models.currency import Currency
 from app.models.entry import Direction, Entry
@@ -43,7 +43,7 @@ async def _resolve_usd_conversion_rate(
     - If currency_code == BASE_CURRENCY: returns Decimal("1") (identity, no query).
     - Otherwise: looks up ExchangeRate(from=currency_code, to=USD, date=transaction_date)
       and returns its `rate`.
-    - Raises HTTP 422 if currency_code/USD is unknown, or no matching rate exists.
+    - Raises ValidationError if currency_code/USD is unknown, or no matching rate exists.
 
     Called once per transaction (not once per entry) -- currency_code and
     transaction_date are transaction-level values shared by every entry.
@@ -57,18 +57,14 @@ async def _resolve_usd_conversion_rate(
     )
     from_currency = from_result.scalar_one_or_none()
     if from_currency is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Unknown currency code: {currency_code!r}",
-        )
+        raise ValidationError(detail=f"Unknown currency code: {currency_code!r}")
 
     # Resolve to_currency (USD) UUID
     to_result = await db.execute(select(Currency).where(Currency.code == BASE_CURRENCY))
     to_currency = to_result.scalar_one_or_none()
     if to_currency is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Base currency {BASE_CURRENCY!r} not found in currencies table",
+        raise ValidationError(
+            detail=f"Base currency {BASE_CURRENCY!r} not found in currencies table"
         )
 
     # Look up ExchangeRate for (from, to, date)
@@ -81,11 +77,10 @@ async def _resolve_usd_conversion_rate(
     )
     exchange_rate = rate_result.scalar_one_or_none()
     if exchange_rate is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ValidationError(
             detail=(
                 f"No exchange rate found for {currency_code}→{BASE_CURRENCY} on {transaction_date}"
-            ),
+            )
         )
 
     return exchange_rate.rate
@@ -117,9 +112,8 @@ async def create_transaction(
     found_ids = {account_id: currency for account_id, currency in result.all()}
     missing = account_ids - found_ids.keys()
     if missing:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Unknown or inactive account_ids: {[str(i) for i in missing]}",
+        raise ValidationError(
+            detail=f"Unknown or inactive account_ids: {[str(i) for i in missing]}"
         )
 
     # ------------------------------------------------------------------
@@ -127,9 +121,8 @@ async def create_transaction(
     # ------------------------------------------------------------------
     directions = {e.direction for e in payload.entries}
     if Direction.DEBIT not in directions or Direction.CREDIT not in directions:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Entries must include at least one debit and one credit",
+        raise ValidationError(
+            detail="Entries must include at least one debit and one credit"
         )
 
     # ------------------------------------------------------------------
@@ -137,9 +130,8 @@ async def create_transaction(
     # ------------------------------------------------------------------
     currencies = {e.currency for e in payload.entries}
     if len(currencies) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"All entries must use the same currency, got: {sorted(currencies)}",
+        raise ValidationError(
+            detail=f"All entries must use the same currency, got: {sorted(currencies)}"
         )
 
     # ------------------------------------------------------------------
@@ -147,8 +139,7 @@ async def create_transaction(
     # ------------------------------------------------------------------
     mismatched = [e for e in payload.entries if e.currency != found_ids[e.account_id]]
     if mismatched:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ValidationError(
             detail=(
                 "Entry currency does not match account currency: "
                 + ", ".join(
@@ -156,7 +147,7 @@ async def create_transaction(
                     f"account_currency={found_ids[e.account_id]}"
                     for e in mismatched
                 )
-            ),
+            )
         )
 
     # ------------------------------------------------------------------
@@ -168,9 +159,8 @@ async def create_transaction(
     )
 
     if debit_sum != credit_sum:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(f"Entries are not balanced: debit={debit_sum} credit={credit_sum}"),
+        raise ValidationError(
+            detail=(f"Entries are not balanced: debit={debit_sum} credit={credit_sum}")
         )
 
     # ------------------------------------------------------------------
