@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +15,7 @@ from app.models.currency import Currency
 from app.models.exchange_rate import ExchangeRate
 from app.models.user import User
 from app.schemas.currency import CurrencyCreate, ExchangeRateCreate
+from app.services.audit_service import log_action
 
 
 # SELECT all rows from currencies and return as list
@@ -22,7 +24,11 @@ async def get_currencies(db: AsyncSession) -> list[Currency]:
     return list(result.scalars().all())
 
 
-async def create_currency(db: AsyncSession, payload: CurrencyCreate) -> Currency:
+async def create_currency(
+    db: AsyncSession,
+    payload: CurrencyCreate,
+    current_user: User,
+) -> Currency:
     currency = Currency(
         code=payload.code,
         name=payload.name,
@@ -31,6 +37,22 @@ async def create_currency(db: AsyncSession, payload: CurrencyCreate) -> Currency
     db.add(currency)
     await db.flush()
     await db.refresh(currency)
+
+    after_value: dict[str, Any] = {
+        "id": str(currency.id),
+        "code": currency.code,
+        "name": currency.name,
+        "decimal_places": currency.decimal_places,
+    }
+    await log_action(
+        db,
+        user_id=current_user.id,
+        entity_type="currency",
+        entity_id=currency.id,
+        action="create",
+        before=None,
+        after=after_value,
+    )
     return currency
 
 
@@ -71,4 +93,21 @@ async def create_exchange_rate(
             detail="Exchange rate for this currency pair and date already exists"
         ) from e
     await db.refresh(exchange_rate)
+
+    after_value: dict[str, Any] = {
+        "id": str(exchange_rate.id),
+        "from_currency_id": str(exchange_rate.from_currency_id),
+        "to_currency_id": str(exchange_rate.to_currency_id),
+        "rate": str(exchange_rate.rate),
+        "effective_date": exchange_rate.effective_date.isoformat(),
+    }
+    await log_action(
+        db,
+        user_id=created_by.id,
+        entity_type="exchange_rate",
+        entity_id=exchange_rate.id,
+        action="create",
+        before=None,
+        after=after_value,
+    )
     return exchange_rate
