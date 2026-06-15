@@ -1,12 +1,14 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.exceptions import DomainError
 from app.core.logging import configure_structlog
 from app.core.telemetry import configure_telemetry
 from app.db.session import engine
@@ -31,6 +33,11 @@ app = FastAPI(
 app.add_middleware(RequestLoggingMiddleware)
 FastAPIInstrumentor().instrument_app(app)
 app.include_router(api_router)
+
+
+@app.exception_handler(DomainError)
+async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 @app.get("/health", tags=["system"])
