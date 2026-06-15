@@ -7,13 +7,13 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AdminUser
 from app.db.session import get_db
 from app.models.audit_log import AuditLog
 from app.schemas.audit_log import AuditLogRead
+from app.services import audit_service
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 
@@ -31,22 +31,12 @@ async def get_audit_logs(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditLog]:
-    filters = []
-    if entity_type:
-        filters.append(AuditLog.entity_type == entity_type)
-    if entity_id:
-        filters.append(AuditLog.entity_id == entity_id)
-    if from_dt:
-        filters.append(AuditLog.created_at >= from_dt)
-    if to_dt:
-        filters.append(AuditLog.created_at <= to_dt)
-
-    stmt = (
-        select(AuditLog)
-        .where(*filters)
-        .order_by(AuditLog.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+    return await audit_service.list_audit_logs(
+        db,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        limit=limit,
+        offset=offset,
     )
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
