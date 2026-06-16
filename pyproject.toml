@@ -12,12 +12,12 @@ dependencies = [
   "python-dotenv>=1.2.2",
   "redis[hiredis]>=8.0.0",
   "bcrypt>=5.0.0",
-  "python-jose[cryptography]>=3.5.0",
   "structlog>=26.1.0",
   "opentelemetry-sdk>=1.42.1",
   "opentelemetry-instrumentation-fastapi>=0.63b1",
   "opentelemetry-instrumentation-sqlalchemy>=0.63b1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.42.1",
+  "pyjwt>=2.13.0",
 ]
 
 [dependency-groups]
