@@ -9,8 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.cache import RedisDep
 from app.core.deps import AdminUser, AuditorOrAdminUser
+from app.core.redis import RedisDep
 from app.db.session import get_db
 from app.dependencies.idempotency import IdempotencyDep
 from app.models.transaction import Transaction
