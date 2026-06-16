@@ -5,9 +5,9 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +35,7 @@ async def get_current_user(
         if sub is None:
             raise credentials_exception
         user_id = uuid.UUID(sub)
-    except (JWTError, ValueError) as e:
+    except (jwt.PyJWTError, ValueError) as e:
         raise credentials_exception from e
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
