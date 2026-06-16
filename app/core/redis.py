@@ -8,7 +8,7 @@ client stored on app.state.redis by the lifespan context manager.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Request
@@ -25,7 +25,7 @@ def create_redis_client() -> aioredis.Redis:
 
 async def get_redis_client(request: Request) -> aioredis.Redis:
     """Return the lifespan-scoped Redis client shared by all dependencies."""
-    return request.app.state.redis
+    return cast(aioredis.Redis, request.app.state.redis)
 
 
 RedisDep = Annotated[aioredis.Redis, Depends(get_redis_client)]
