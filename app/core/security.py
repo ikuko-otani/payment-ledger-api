@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
 import bcrypt
-from jose import jwt
+import jwt
 
 from app.core.config import settings
 
@@ -37,6 +36,4 @@ def create_access_token(data: dict[str, object]) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
     to_encode["exp"] = expire
-    return cast(
-        str, jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-    )
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
