@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
+import jwt
 import pytest
 from httpx import AsyncClient
+
+from app.core.config import settings
 
 
 async def _register_and_login(
@@ -26,50 +30,32 @@ async def _register_and_login(
 
 def _expired_token() -> str:
     """Return a syntactically valid but expired JWT."""
-    from datetime import datetime, timedelta
-
-    from jose import jwt as jose_jwt
-
-    from app.core.config import settings
-
     payload = {
         "sub": "00000000-0000-0000-0000-000000000000",
         "exp": datetime.now(UTC) - timedelta(minutes=1),
     }
-    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-
-
-# ---------------------------------------------------------------------------
-# S3-7: token-forgery helpers
-# ---------------------------------------------------------------------------
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
 def _invalid_signature_token() -> str:
     """Return a JWT signed with the wrong secret key."""
-    from uuid import uuid4
-
-    from jose import jwt as jose_jwt
-
-    from app.core.config import settings
-
     payload = {"sub": str(uuid4())}
-    return jose_jwt.encode(payload, "wrong-secret", algorithm=settings.algorithm)
+    return jwt.encode(payload, "wrong-secret", algorithm=settings.algorithm)
 
 
 def _nonexistent_user_token() -> str:
     """Return a JWT with a random UUID sub that does not exist in the DB."""
-    from datetime import datetime, timedelta
-    from uuid import uuid4
-
-    from jose import jwt as jose_jwt
-
-    from app.core.config import settings
-
     payload = {
         "sub": str(uuid4()),
         "exp": datetime.now(UTC) + timedelta(minutes=30),
     }
-    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def _no_sub_token() -> str:
+    """Return a JWT signed correctly but with no 'sub' claim at all."""
+    payload = {"exp": datetime.now(UTC) + timedelta(minutes=30)}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
 # ---------------------------------------------------------------------------
@@ -138,18 +124,6 @@ async def test_nonexistent_user_id_token_returns_401(
 # ---------------------------------------------------------------------------
 
 
-def _no_sub_token() -> str:
-    """Return a JWT signed correctly but with no 'sub' claim at all."""
-    from datetime import datetime, timedelta
-
-    from jose import jwt as jose_jwt
-
-    from app.core.config import settings
-
-    payload = {"exp": datetime.now(UTC) + timedelta(minutes=30)}
-    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-
-
 @pytest.mark.asyncio
 async def test_jwt_missing_sub_claim_returns_401(
     unauthed_client: AsyncClient,
@@ -158,7 +132,6 @@ async def test_jwt_missing_sub_claim_returns_401(
 
     Exercises deps.py line 36: `if sub is None: raise credentials_exception`.
     """
-    # TODO: implement (hint: call _no_sub_token(), send to GET /api/v1/accounts, expect 401)
     token = _no_sub_token()
     response = await unauthed_client.get(
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
