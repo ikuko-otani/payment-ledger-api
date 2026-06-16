@@ -10,6 +10,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import DomainError
 from app.core.logging import configure_structlog
+from app.core.redis import create_redis_client
 from app.core.telemetry import configure_telemetry
 from app.db.session import engine
 from app.middleware.logging import RequestLoggingMiddleware
@@ -20,7 +21,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_structlog()
     configure_telemetry()
     SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
-    yield
+    app.state.redis = create_redis_client()
+    try:
+        yield
+    finally:
+        await app.state.redis.aclose()
 
 
 app = FastAPI(

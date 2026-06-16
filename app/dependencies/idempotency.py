@@ -13,29 +13,13 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
-import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException, status
 
-from app.core.config import settings
+from app.core.redis import RedisDep
 
 # TTL for idempotency keys in Redis (24 hours)
 _IDEMPOTENCY_TTL_SECONDS = 86_400
 _REDIS_KEY_PREFIX = "idempotency:"
-
-
-async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
-    """Yield a Redis client. Called once per request."""
-    # redis.asyncio handles connection pooling automatically.
-    client: aioredis.Redis = aioredis.from_url(
-        settings.redis_url, encoding="utf-8", decode_responses=True
-    )
-    try:
-        yield client
-    finally:
-        await client.aclose()
-
-
-RedisDep = Annotated[aioredis.Redis, Depends(get_redis)]
 
 
 async def check_idempotency(

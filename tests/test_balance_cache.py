@@ -8,7 +8,7 @@ import redis.asyncio as aioredis
 from httpx import AsyncClient
 from testcontainers.redis import RedisContainer
 
-from app.core.cache import get_redis_client
+from app.core.redis import get_redis_client
 from app.main import app as fastapi_app
 
 # redis_container is defined in conftest.py (session-scoped, shared across all test files)

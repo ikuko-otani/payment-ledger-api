@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import RedisDep
 from app.core.config import settings
 from app.core.deps import AdminUser, AuditorOrAdminUser
+from app.core.redis import RedisDep
 from app.db.session import get_db
 from app.models.account import Account
 from app.schemas.account import AccountCreate, AccountRead, BalanceResponse

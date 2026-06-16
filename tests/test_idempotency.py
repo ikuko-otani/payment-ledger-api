@@ -6,67 +6,22 @@ import uuid
 
 import pytest
 import pytest_asyncio
-import redis.asyncio as aioredis
 from httpx import AsyncClient
-from testcontainers.redis import RedisContainer
 
-from app.core.cache import get_redis_client
-from app.dependencies.idempotency import get_redis
-from app.main import app as fastapi_app
 from app.models.account import AccountType
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-# redis_container is defined in conftest.py (session-scoped, shared across all test files)
-
 
 @pytest_asyncio.fixture()
-async def redis_client(redis_container: RedisContainer):
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
-        f"redis://{host}:{port}", encoding="utf-8", decode_responses=True
-    )
-    yield client
-    await client.flushdb()
-    await client.aclose()
-
-
-@pytest_asyncio.fixture()
-async def idempotent_client(
-    async_client: AsyncClient,
-    redis_client: aioredis.Redis,  # type: ignore[type-arg]
-):
-    async def override_get_redis():
-        yield redis_client
-
-    fastapi_app.dependency_overrides[get_redis] = override_get_redis
+async def idempotent_client(async_client: AsyncClient) -> AsyncClient:
+    # async_client already overrides get_redis_client (app.core.redis),
+    # which covers both balance-cache and idempotency deps after TD-020.
     yield async_client
 
 
 @pytest_asyncio.fixture()
-async def full_flow_client(
-    async_client: AsyncClient,
-    redis_client: aioredis.Redis,  # type: ignore[type-arg]
-):
-    """Override both Redis dependencies (idempotency + balance cache) with the test container."""
-
-    async def override_get_redis():
-        yield redis_client
-
-    async def override_get_redis_client():
-        yield redis_client
-
-    fastapi_app.dependency_overrides[get_redis] = override_get_redis
-    fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
+async def full_flow_client(async_client: AsyncClient) -> AsyncClient:
+    # Same as idempotent_client: single override in async_client covers both deps.
     yield async_client
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 async def test_same_idempotency_key_returns_409_on_second_request(
@@ -87,7 +42,6 @@ async def test_same_idempotency_key_returns_409_on_second_request(
     payload = {
         "description": "Idempotency test",
         "transaction_date": "2024-06-01",
-        # "amount" removed from transaction level
         "entries": [
             {
                 "account_id": str(acc_debit.id),
@@ -208,7 +162,6 @@ async def test_failed_transaction_releases_idempotency_key_for_retry(
     )
     key = str(uuid.uuid4())
 
-    # Step 1: Send an unbalanced transaction — should return 422
     bad_payload = {
         "description": "Unbalanced",
         "transaction_date": "2024-06-01",
@@ -232,7 +185,6 @@ async def test_failed_transaction_releases_idempotency_key_for_retry(
     )
     assert r1.status_code == 422
 
-    # Step 2: Retry with the same key and a valid payload — key should have been released
     good_payload = {
         "description": "Retry after fix",
         "transaction_date": "2024-06-01",
@@ -282,7 +234,6 @@ async def test_balance_reflects_new_transaction_after_commit(
         currency="USD",
     )
 
-    # Step 1: POST a transaction (debit 500 against acc_debit)
     payload = {
         "description": "Balance commit test",
         "transaction_date": "2024-06-01",
@@ -304,7 +255,6 @@ async def test_balance_reflects_new_transaction_after_commit(
     r_post = await full_flow_client.post("/api/v1/transactions", json=payload)
     assert r_post.status_code == 201
 
-    # Step 2: GET balance for acc_debit — should reflect the posted debit
     as_of = datetime.utcnow().isoformat()
     r_balance = await full_flow_client.get(
         f"/api/v1/accounts/{acc_debit.id}/balance", params={"as_of": as_of}

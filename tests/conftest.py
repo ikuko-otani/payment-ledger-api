@@ -27,8 +27,8 @@ from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
 from alembic import command as alembic_command
-from app.core.cache import get_redis_client
 from app.core.deps import get_current_user
+from app.core.redis import get_redis_client
 from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.main import app as fastapi_app
@@ -211,7 +211,10 @@ async def async_client(
 
 
 @pytest_asyncio.fixture()
-async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, None]:
+async def unauthed_client(
+    engine: AsyncEngine,
+    redis_container: RedisContainer,
+) -> AsyncGenerator[AsyncClient, None]:
     """AsyncClient without get_current_user override — for testing auth itself."""
     session_factory = async_sessionmaker(
         engine,
@@ -228,13 +231,17 @@ async def unauthed_client(engine: AsyncEngine) -> AsyncGenerator[AsyncClient, No
                 await session.rollback()
                 raise
 
+    _redis, override_get_redis_client = _make_redis_override(redis_container)
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
     # get_current_user は override しない → 実際の JWT 検証が走る
 
-    transport = ASGITransport(app=fastapi_app)
+    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
+    await _redis.aclose()
     fastapi_app.dependency_overrides.clear()
 
 
