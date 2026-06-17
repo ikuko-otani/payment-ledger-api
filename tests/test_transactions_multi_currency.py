@@ -207,11 +207,16 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Transactions must not appear on both page 1 and page 2.
+    """Transactions must not appear on both page 1 and page 2, and must be date-ordered.
 
     Why this test: without a deterministic ORDER BY (pre-TD-025), limit/offset
     pagination with concurrent writes can return the same row twice or skip rows.
-    Seeds N+1 transactions and asserts that page-1 IDs and page-2 IDs are disjoint.
+    Seeds 4 transactions with distinct dates in non-chronological insertion order,
+    then asserts:
+      1. page-1 IDs and page-2 IDs are disjoint (no duplicates)
+      2. page-1 dates are in descending order (newest first)
+    Inserting in non-chronological order ensures the ORDER BY is actually sorting,
+    not relying on insertion order.
     """
     debit = await _seed_account(
         db_session, "Cash Pag", AccountType.ASSET, "PAG-1100", "EUR"
@@ -221,32 +226,25 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
     )
     await db_session.commit()
 
-    page_size = 3
-    total = page_size + 1  # 4 rows spans 2 pages at limit=3
-
-    base: dict = {
-        "transaction_date": "2024-06-01",
-        "entries": [
-            {
-                "account_id": str(debit.id),
-                "direction": "debit",
-                "amount": 10,
-                "currency": "EUR",
-            },
-            {
-                "account_id": str(credit.id),
-                "direction": "credit",
-                "amount": 10,
-                "currency": "EUR",
-            },
-        ],
-    }
-    for i in range(total):
+    entries = [
+        {"account_id": str(debit.id), "direction": "debit", "amount": 10, "currency": "EUR"},
+        {"account_id": str(credit.id), "direction": "credit", "amount": 10, "currency": "EUR"},
+    ]
+    # Insert in non-chronological order to verify ORDER BY is sorting, not relying on
+    # insertion order. Expected display order (date desc): 06-04, 06-03, 06-02, 06-01.
+    for tx_date, description in [
+        ("2024-06-02", "pag-middle"),
+        ("2024-06-04", "pag-newest"),
+        ("2024-06-01", "pag-oldest"),
+        ("2024-06-03", "pag-second"),
+    ]:
         r = await async_client.post(
-            "/api/v1/transactions", json={**base, "description": f"pag-{i}"}
+            "/api/v1/transactions",
+            json={"transaction_date": tx_date, "description": description, "entries": entries},
         )
         assert r.status_code == 201
 
+    page_size = 3
     p1 = await async_client.get(
         "/api/v1/transactions", params={"limit": page_size, "offset": 0}
     )
@@ -256,11 +254,16 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
 
     assert p1.status_code == 200
     assert p2.status_code == 200
+
     ids_p1 = {item["id"] for item in p1.json()}
     ids_p2 = {item["id"] for item in p2.json()}
     assert len(ids_p1) == page_size
     assert len(ids_p2) == 1
     assert ids_p1.isdisjoint(ids_p2), f"Duplicate IDs across pages: {ids_p1 & ids_p2}"
+
+    # Verify date descending order across page 1
+    dates_p1 = [item["transaction_date"] for item in p1.json()]
+    assert dates_p1 == ["2024-06-04", "2024-06-03", "2024-06-02"]
 
 
 @pytest.mark.asyncio
