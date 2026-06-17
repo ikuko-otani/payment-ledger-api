@@ -227,8 +227,18 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
     await db_session.commit()
 
     entries = [
-        {"account_id": str(debit.id), "direction": "debit", "amount": 10, "currency": "EUR"},
-        {"account_id": str(credit.id), "direction": "credit", "amount": 10, "currency": "EUR"},
+        {
+            "account_id": str(debit.id),
+            "direction": "debit",
+            "amount": 10,
+            "currency": "EUR",
+        },
+        {
+            "account_id": str(credit.id),
+            "direction": "credit",
+            "amount": 10,
+            "currency": "EUR",
+        },
     ]
     # Insert in non-chronological order to verify ORDER BY is sorting, not relying on
     # insertion order. Expected display order (date desc): 06-04, 06-03, 06-02, 06-01.
@@ -240,7 +250,11 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
     ]:
         r = await async_client.post(
             "/api/v1/transactions",
-            json={"transaction_date": tx_date, "description": description, "entries": entries},
+            json={
+                "transaction_date": tx_date,
+                "description": description,
+                "entries": entries,
+            },
         )
         assert r.status_code == 201
 

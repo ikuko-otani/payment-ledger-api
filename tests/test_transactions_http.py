@@ -351,14 +351,23 @@ async def test_same_date_transactions_ordered_by_posted_at_desc(
 
     entries = [
         {"account_id": debit_id, "direction": "debit", "amount": 10, "currency": "EUR"},
-        {"account_id": credit_id, "direction": "credit", "amount": 10, "currency": "EUR"},
+        {
+            "account_id": credit_id,
+            "direction": "credit",
+            "amount": 10,
+            "currency": "EUR",
+        },
     ]
     # All share the same transaction_date — only posted_at distinguishes them.
     # Sequential awaits guarantee posted_at: first < second < third.
     for description in ["first", "second", "third"]:
         r = await async_client.post(
             "/api/v1/transactions",
-            json={"transaction_date": "2024-06-01", "description": description, "entries": entries},
+            json={
+                "transaction_date": "2024-06-01",
+                "description": description,
+                "entries": entries,
+            },
         )
         assert r.status_code == 201
 
