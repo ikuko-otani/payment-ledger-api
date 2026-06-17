@@ -20,7 +20,7 @@ from app.services.audit_service import log_action
 
 # SELECT all rows from currencies and return as list
 async def get_currencies(db: AsyncSession) -> list[Currency]:
-    result = await db.execute(select(Currency))
+    result = await db.execute(select(Currency).order_by(Currency.code))
     return list(result.scalars().all())
 
 
@@ -69,6 +69,7 @@ async def get_exchange_rates(
         stmt = stmt.where(ExchangeRate.to_currency_id == to_currency_id)
     if effective_date is not None:
         stmt = stmt.where(ExchangeRate.effective_date == effective_date)
+    stmt = stmt.order_by(ExchangeRate.effective_date.desc(), ExchangeRate.id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
