@@ -14,8 +14,8 @@ from app.core.exceptions import ConflictError
 from app.models.currency import Currency
 from app.models.exchange_rate import ExchangeRate
 from app.schemas.currency import CurrencyCreate, ExchangeRateCreate
-from app.services.audit_service import log_action
 from app.schemas.token import TokenUser
+from app.services.audit_service import log_action
 
 
 # SELECT all rows from currencies and return as list

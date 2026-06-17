@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
 from app.schemas.account import AccountCreate
-from app.services.audit_service import log_action
 from app.schemas.token import TokenUser
+from app.services.audit_service import log_action
 
 
 async def create_account(
