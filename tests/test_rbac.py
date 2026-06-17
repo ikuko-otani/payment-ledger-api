@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
-from app.models.user import User
 
 # ---------------------------------------------------------------------------
 # Helpers
