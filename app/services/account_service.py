@@ -7,15 +7,15 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
-from app.models.user import User
 from app.schemas.account import AccountCreate
 from app.services.audit_service import log_action
+from app.schemas.token import TokenUser
 
 
 async def create_account(
     db: AsyncSession,
     payload: AccountCreate,
-    current_user: User,
+    current_user: TokenUser,
 ) -> Account:
     account = Account(
         code=payload.code,

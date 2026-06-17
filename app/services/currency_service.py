@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError
 from app.models.currency import Currency
 from app.models.exchange_rate import ExchangeRate
-from app.models.user import User
 from app.schemas.currency import CurrencyCreate, ExchangeRateCreate
 from app.services.audit_service import log_action
+from app.schemas.token import TokenUser
 
 
 # SELECT all rows from currencies and return as list
@@ -27,7 +27,7 @@ async def get_currencies(db: AsyncSession) -> list[Currency]:
 async def create_currency(
     db: AsyncSession,
     payload: CurrencyCreate,
-    current_user: User,
+    current_user: TokenUser,
 ) -> Currency:
     currency = Currency(
         code=payload.code,
@@ -76,7 +76,7 @@ async def get_exchange_rates(
 async def create_exchange_rate(
     db: AsyncSession,
     payload: ExchangeRateCreate,
-    created_by: User,
+    created_by: TokenUser,
 ) -> ExchangeRate:
     exchange_rate = ExchangeRate(
         from_currency_id=payload.from_currency_id,
