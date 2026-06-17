@@ -26,7 +26,6 @@ from app.models.user import User, UserRole
 from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
 
-
 # ---------------------------------------------------------------------------
 # Seed helpers (flush only — caller commits after all setup is done)
 # ---------------------------------------------------------------------------
@@ -75,7 +74,9 @@ async def _seed_account(
     code: str,
     currency: str,
 ) -> Account:
-    account = Account(name=name, account_type=account_type, code=code, currency=currency)
+    account = Account(
+        name=name, account_type=account_type, code=code, currency=currency
+    )
     db.add(account)
     await db.flush()
     return account
@@ -106,8 +107,12 @@ async def test_eur_transaction_sets_converted_amount_usd(
         tx_date=date(2024, 6, 1),
         created_by_id=user.id,
     )
-    debit = await _seed_account(db_session, "Cash EUR-A", AccountType.ASSET, "MC-1100", "EUR")
-    credit = await _seed_account(db_session, "Revenue EUR-A", AccountType.REVENUE, "MC-4000", "EUR")
+    debit = await _seed_account(
+        db_session, "Cash EUR-A", AccountType.ASSET, "MC-1100", "EUR"
+    )
+    credit = await _seed_account(
+        db_session, "Revenue EUR-A", AccountType.REVENUE, "MC-4000", "EUR"
+    )
     await db_session.commit()
 
     payload = TransactionCreate(
@@ -142,9 +147,10 @@ async def test_jpy_transaction_converted_amount_usd_rounded_half_up(
 ) -> None:
     """JPY (integer currency) amounts are rounded ROUND_HALF_UP when converted to USD-cents.
 
-    Rate 0.5, amount ¥3 → 3 × 0.5 = 1.5 → ROUND_HALF_UP → 2.
-    ROUND_DOWN would give 1; this test distinguishes the two rounding modes.
-    A second case uses amount ¥1 → 0.5 → ROUND_HALF_UP → 1 (not truncated to 0).
+    Rate 0.5, amount ¥5 → 5 × 0.5 = 2.5 → ROUND_HALF_UP → 3.
+    ROUND_HALF_EVEN (banker's rounding) would give 2 (rounds to nearest even).
+    ROUND_DOWN would also give 2.
+    Using 2.5 as the midpoint makes all three rounding modes distinguishable.
     """
     jpy = await _seed_currency(db_session, "JPY", "Japanese Yen", 0)
     usd = await _seed_currency(db_session, "USD", "US Dollar", 2)
@@ -157,8 +163,12 @@ async def test_jpy_transaction_converted_amount_usd_rounded_half_up(
         tx_date=date(2024, 6, 1),
         created_by_id=user.id,
     )
-    debit = await _seed_account(db_session, "Cash JPY-A", AccountType.ASSET, "MC-1101", "JPY")
-    credit = await _seed_account(db_session, "Revenue JPY-A", AccountType.REVENUE, "MC-4001", "JPY")
+    debit = await _seed_account(
+        db_session, "Cash JPY-A", AccountType.ASSET, "MC-1101", "JPY"
+    )
+    credit = await _seed_account(
+        db_session, "Revenue JPY-A", AccountType.REVENUE, "MC-4001", "JPY"
+    )
     await db_session.commit()
 
     payload = TransactionCreate(
@@ -169,13 +179,13 @@ async def test_jpy_transaction_converted_amount_usd_rounded_half_up(
             EntryCreate(
                 account_id=debit.id,
                 direction=Direction.DEBIT,
-                amount=3,
+                amount=5,
                 currency="JPY",
             ),
             EntryCreate(
                 account_id=credit.id,
                 direction=Direction.CREDIT,
-                amount=3,
+                amount=5,
                 currency="JPY",
             ),
         ],
@@ -183,8 +193,8 @@ async def test_jpy_transaction_converted_amount_usd_rounded_half_up(
 
     tx = await create_transaction(db_session, payload, user_id=user.id)
 
-    # 3 × 0.5 = 1.5 → ROUND_HALF_UP → 2  (ROUND_DOWN would give 1)
-    assert all(e.converted_amount_usd == 2 for e in tx.entries)
+    # 5 × 0.5 = 2.5 → ROUND_HALF_UP → 3  (ROUND_HALF_EVEN would give 2)
+    assert all(e.converted_amount_usd == 3 for e in tx.entries)
 
 
 # ---------------------------------------------------------------------------
