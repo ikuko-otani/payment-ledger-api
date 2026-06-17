@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
-from app.models.user import User
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -174,26 +172,30 @@ async def test_admin_can_list_transactions(async_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_inactive_user_returns_401(
+async def test_inactive_user_jwt_claim_returns_401(
     unauthed_client: AsyncClient,
-    db_session: AsyncSession,
 ) -> None:
-    """A token belonging to a deactivated user must return 401.
+    """A JWT with is_active=False in the claim must return 401.
 
-    Flow: register → login (get token) → deactivate via db_session → call endpoint.
+    After TD-015: get_current_user checks the is_active claim from the JWT
+    payload rather than re-querying the database. Deactivating a user in the
+    DB does not immediately revoke existing tokens; the revocation window is
+    bounded by ACCESS_TOKEN_EXPIRE_MINUTES (see docs/adr/006-jwt-claims-no-db-per-request.md).
+    This test verifies that a token explicitly carrying is_active=False is rejected.
     """
-    await unauthed_client.post(
-        "/api/v1/users", json={"email": "inactive@example.com", "password": "pass1234"}
-    )
-    resp = await unauthed_client.post(
-        "/api/v1/auth/login",
-        json={"email": "inactive@example.com", "password": "pass1234"},
-    )
-    token = resp.json()["access_token"]
-    await db_session.execute(
-        update(User).where(User.email == "inactive@example.com").values(is_active=False)
-    )
-    await db_session.commit()
+    from datetime import UTC, datetime, timedelta
+
+    import jwt as pyjwt
+
+    from app.core.config import settings
+
+    payload = {
+        "sub": "00000000-0000-0000-0000-000000000099",
+        "role": "auditor",
+        "is_active": False,
+        "exp": datetime.now(UTC) + timedelta(minutes=30),
+    }
+    token = pyjwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
     resp = await unauthed_client.get(
         "/api/v1/accounts", headers={"Authorization": f"Bearer {token}"}
     )

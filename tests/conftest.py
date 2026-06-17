@@ -191,9 +191,8 @@ async def async_client(
     async def override_get_current_user() -> User:
         return User(
             id=_FIXTURE_ADMIN_ID,
-            email="fixture@example.com",
-            hashed_password="",
             role=UserRole.ADMIN,
+            is_active=True,
         )
 
     _redis, override_get_redis_client = _make_redis_override(redis_container)
@@ -202,7 +201,7 @@ async def async_client(
     fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
     fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
 
-    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
@@ -237,7 +236,7 @@ async def unauthed_client(
     fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
     # get_current_user は override しない → 実際の JWT 検証が走る
 
-    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
@@ -295,11 +294,11 @@ def _make_redis_override(
 ) -> tuple[aioredis.Redis, Callable]:  # type: ignore[type-arg]
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
-    client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
+    client: aioredis.Redis = aioredis.from_url(
         f"redis://{host}:{port}", encoding="utf-8", decode_responses=True
     )
 
-    async def override() -> AsyncGenerator[aioredis.Redis, None]:  # type: ignore[type-arg]
+    async def override() -> AsyncGenerator[aioredis.Redis, None]:
         yield client
 
     return client, override
@@ -314,7 +313,7 @@ async def admin_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     await _seed_user(engine, email, password, UserRole.ADMIN)
 
     fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
-    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as tmp:
         resp = await tmp.post(
             "/api/v1/auth/login",
@@ -335,7 +334,7 @@ async def auditor_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     await _seed_user(engine, email, password, UserRole.AUDITOR)
 
     fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
-    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as tmp:
         resp = await tmp.post(
             "/api/v1/auth/login",
@@ -373,7 +372,7 @@ async def authenticated_client(
         fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
         fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
 
-        transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+        transport = ASGITransport(app=fastapi_app)
         client = await stack.enter_async_context(
             AsyncClient(transport=transport, base_url="http://test")
         )
@@ -407,7 +406,7 @@ async def auditor_client(
     fastapi_app.dependency_overrides[get_db] = _make_db_override(engine)
     fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
 
-    transport = ASGITransport(app=fastapi_app)  # type: ignore[arg-type]
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/v1/auth/login",

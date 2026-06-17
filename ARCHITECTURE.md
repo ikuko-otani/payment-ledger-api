@@ -71,7 +71,10 @@ per `transaction_id`.
 
 ## 3. Key Design Decisions
 
-### ADR-001 — Money as BIGINT (minor units)
+The numbered design decisions below use this document's own sequence.
+Formal ADR files with their own numbering live in `docs/adr/`.
+
+### Money as BIGINT (minor units)
 
 **Decision**: Store all monetary amounts as `BIGINT` representing the smallest
 currency unit (cents, pence, yen). A separate `currency CHAR(3)` column carries
@@ -87,7 +90,7 @@ is looked up from a small reference table or hardcoded per ISO 4217.
 
 ---
 
-### ADR-002 — Double-entry balance enforced at the application layer (primary) + DB constraint trigger (safety net)
+### Double-entry balance enforced at the application layer (primary) + DB constraint trigger (safety net)
 
 **Decision**: FastAPI service layer validates `SUM(DEBIT entries) == SUM(CREDIT entries)`
 before persisting. A PostgreSQL `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED`
@@ -100,19 +103,23 @@ bug that bypasses the service layer (e.g. direct DB writes, migration scripts).
 
 ---
 
-### ADR-003 — Idempotency via PostgreSQL UNIQUE constraint (MVP)
+### Idempotency key storage
 
-**Decision**: `transactions.idempotency_key TEXT UNIQUE`. On `409 Conflict` the
-API re-reads and returns the original response body.
+**Initial decision (MVP)**: `transactions.idempotency_key TEXT UNIQUE`.
+PostgreSQL's unique index provided strong atomicity with zero additional
+infrastructure.
 
-**Rationale**: For MVP traffic, PostgreSQL's unique index gives strong atomicity
-guarantees with zero additional infrastructure. Redis-based distributed locking
-adds operational complexity (TTL management, cache stampede) and is deferred until
-horizontal scaling requires it (> ~50 rps to the same resource).
+**Updated in S2-3**: Migrated to Redis-backed idempotency with a 24 h TTL.
+See `docs/adr/001-redis-for-idempotency-key.md` for the full rationale.
+
+**Summary**: Redis allows the idempotency check to be decoupled from the DB
+write transaction, enables TTL-based expiry, and clears the key on failure so
+retries are not blocked by a previously failed request. The PostgreSQL UNIQUE
+constraint is retained as a safety net.
 
 ---
 
-### ADR-004 — Immutable transaction log
+### Immutable transaction log
 
 **Decision**: `transactions` and `entries` rows are never updated or deleted after
 `status = POSTED`. Corrections are modelled as new reversal transactions.
@@ -125,18 +132,18 @@ simplifies CDC (Change Data Capture) for downstream analytics.
 
 ## 4. Tech Stack
 
-| Layer          | Technology                              |
-|----------------|-----------------------------------------|
-| API            | FastAPI 0.111 (async)                   |
-| Validation     | Pydantic v2                             |
-| ORM            | SQLAlchemy 2.0 (async + asyncpg driver) |
-| Migrations     | Alembic                                 |
-| Database       | PostgreSQL 16                           |
-| Auth           | JWT (python-jose)                       |
-| Testing        | pytest + pytest-asyncio + testcontainers|
+| Layer            | Technology                              |
+|------------------|-----------------------------------------|
+| API              | FastAPI 0.111 (async)                   |
+| Validation       | Pydantic v2                             |
+| ORM              | SQLAlchemy 2.0 (async + asyncpg driver) |
+| Migrations       | Alembic                                 |
+| Database         | PostgreSQL 16                           |
+| Auth             | JWT (PyJWT)                             |
+| Testing          | pytest + pytest-asyncio + testcontainers|
 | Containerisation | Docker + Docker Compose               |
-| CI             | GitHub Actions (lint / mypy / test)     |
-| Observability  | structlog (JSON) + OpenTelemetry        |
+| CI               | GitHub Actions (lint / mypy / test)     |
+| Observability    | structlog (JSON) + OpenTelemetry        |
 
 ---
 
@@ -274,7 +281,7 @@ attackers.
 
 ## 8. Multi-Currency Design (S4)
 
-### ADR-006 — Rounding policy: ROUND_HALF_UP for currency conversion
+### Rounding policy: ROUND_HALF_UP for currency conversion
 
 **Decision**: Use `ROUND_HALF_UP` (always round 0.5 away from zero) when converting
 amounts to USD cents via `Decimal.quantize(Decimal("1"), rounding=ROUND_HALF_UP)`.
@@ -295,7 +302,7 @@ default), which rounds 0.5 to the nearest even number (2.5 → 2, 3.5 → 4).
   (useful in statistical aggregations). For per-transaction conversion where
   each row is audited independently, ROUND_HALF_UP is preferred.
 
-### ADR-007 — Hub-and-Spoke base currency (USD)
+### Hub-and-Spoke base currency (USD)
 
 **Decision**: Store a single `converted_amount_usd` (BigInteger, USD cents) on every
 `entries` row, computed at write time from the `ExchangeRate` table. USD is the base.
@@ -318,7 +325,7 @@ on read (re-computing at query time using the current rate).
 - Changing BASE_CURRENCY requires a full data migration of all `converted_amount_usd`
   values — treat the constant as immutable once production data exists.
 
-### ADR-008 — JSONB for audit log snapshot columns
+### JSONB for audit log snapshot columns
 
 **Decision**: Store `before_value` and `after_value` in `audit_logs` as
 PostgreSQL `JSONB` columns rather than plain `JSON`, a normalized
@@ -356,7 +363,7 @@ snapshot table, or application-level serialised strings.
   PostgreSQL. Accepted as a deliberate choice; the project already depends
   on PostgreSQL-specific features (UUID type, ENUM types, BIGINT).
 
-### ADR-009 — `Numeric(18,8)` for exchange rate storage, not `Float`
+### `Numeric(18,8)` for exchange rate storage, not `Float`
 
 **Decision**: Store `exchange_rates.rate` as PostgreSQL `NUMERIC(18,8)` (mapped to
 Python `decimal.Decimal`), not as `FLOAT` or `REAL`.
@@ -386,7 +393,7 @@ exactly — it becomes `0.100000000000000005551115123125782702118158340454101562
 - Precision `(18,8)` supports rates up to `9_999_999_999.99999999` with 8 decimal places,
   covering all fiat currencies and most crypto assets at realistic exchange rates.
 
-### ADR-010 — Append-only AuditLog over Event Sourcing (MVP)
+### Append-only AuditLog over Event Sourcing (MVP)
 
 **Decision**: Record auditable state changes by appending rows to `audit_logs`
 (one row per write, carrying `before_value` and `after_value` as JSONB snapshots)
@@ -534,7 +541,7 @@ and binds it into every structlog entry via `structlog.contextvars`.
 (`balance:{account_id}:{as_of_date}`); on a miss it computes the balance from
 PostgreSQL and writes it back to Redis with a TTL; on every transaction write,
 the service explicitly deletes the cache keys for every account touched by
-that transaction (see `app/services/balance.py`, `app/core/cache.py`,
+that transaction (see `app/services/balance.py`, `app/core/redis.py`,
 `tests/test_balance_cache.py`).
 
 **What was rejected / considered**:
@@ -582,7 +589,6 @@ that transaction (see `app/services/balance.py`, `app/core/cache.py`,
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out
 - **Row-level security** in PostgreSQL for multi-tenant isolation
-- **Redis-based idempotency store** with 24 h TTL at high write concurrency
 - **Prometheus metrics** (transaction latency p99, balance drift alert)
 - **Kubernetes Helm chart** for horizontal scaling
 

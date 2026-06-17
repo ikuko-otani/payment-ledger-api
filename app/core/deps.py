@@ -8,20 +8,17 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import get_db
-from app.models.user import User, UserRole
+from app.models.user import UserRole
+from app.schemas.token import TokenUser
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
+) -> TokenUser:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -32,26 +29,25 @@ async def get_current_user(
             token, settings.secret_key, algorithms=[settings.algorithm]
         )
         sub: str | None = payload.get("sub")
-        if sub is None:
+        role_str: str | None = payload.get("role")
+        is_active: bool | None = payload.get("is_active")
+        if sub is None or role_str is None or is_active is None:
             raise credentials_exception
         user_id = uuid.UUID(sub)
+        role = UserRole(role_str)
     except (jwt.PyJWTError, ValueError) as e:
         raise credentials_exception from e
-    user_result = await db.execute(select(User).where(User.id == user_id))
-    user = user_result.scalar_one_or_none()
-    if user is None:
+    if not is_active:
         raise credentials_exception
-    if not user.is_active:
-        raise credentials_exception  # not 403
-    return user
+    return TokenUser(id=user_id, role=role, is_active=is_active)
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[TokenUser, Depends(get_current_user)]
 
 
 async def require_admin(
-    current_user: User = Depends(get_current_user),
-) -> User:
+    current_user: TokenUser = Depends(get_current_user),
+) -> TokenUser:
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
@@ -60,8 +56,8 @@ async def require_admin(
 
 
 async def require_auditor_or_admin(
-    current_user: User = Depends(get_current_user),
-) -> User:
+    current_user: TokenUser = Depends(get_current_user),
+) -> TokenUser:
     if current_user.role not in {UserRole.ADMIN, UserRole.AUDITOR}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -70,5 +66,5 @@ async def require_auditor_or_admin(
     return current_user
 
 
-AdminUser = Annotated[User, Depends(require_admin)]
-AuditorOrAdminUser = Annotated[User, Depends(require_auditor_or_admin)]
+AdminUser = Annotated[TokenUser, Depends(require_admin)]
+AuditorOrAdminUser = Annotated[TokenUser, Depends(require_auditor_or_admin)]

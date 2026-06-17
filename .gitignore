@@ -1,5 +1,6 @@
 .env
 __pycache__/
+*.py[cod]
 .venv/
 
 # Personal goal template (not version-controlled)
@@ -8,7 +9,17 @@ flagship-goal-prompt-template.md
 # Claude Code local settings (not version-controlled)
 .claude/
 
-# pytest coverage artifacts
+# pytest / coverage artifacts
+.pytest_cache/
 .coverage
 coverage.xml
 htmlcov/
+
+# IDE directories
+.idea/
+.vscode/
+
+# Build / packaging
+dist/
+build/
+*.egg-info/
