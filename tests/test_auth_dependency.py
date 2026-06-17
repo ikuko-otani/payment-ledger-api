@@ -44,7 +44,12 @@ def _invalid_signature_token() -> str:
 
 
 def _nonexistent_user_token() -> str:
-    """Return a JWT with a random UUID sub that does not exist in the DB."""
+    """Return a JWT with a random UUID sub but no role/is_active claims.
+
+    After TD-015: get_current_user no longer queries the DB.
+    This token returns 401 because required claims (role, is_active) are absent,
+    not because the user UUID is absent from the database.
+    """
     payload = {
         "sub": str(uuid4()),
         "exp": datetime.now(UTC) + timedelta(minutes=30),
