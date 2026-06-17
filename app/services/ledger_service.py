@@ -49,7 +49,9 @@ async def get_ledger_entries(
         .join(Entry.transaction)
         .options(contains_eager(Entry.transaction))
         .where(*filters)
-        .order_by(Transaction.transaction_date.desc(), Entry.id)
+        .order_by(
+            Transaction.transaction_date.desc(), Transaction.posted_at.desc(), Entry.id
+        )
         .offset(offset)
         .limit(limit)
     )
