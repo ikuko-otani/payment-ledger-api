@@ -325,3 +325,44 @@ async def test_list_transactions_ordered_by_transaction_date_desc(
     dates = [item["transaction_date"] for item in response.json()]
 
     assert dates == ["2024-03-01", "2024-02-01", "2024-01-01"]
+
+
+@pytest.mark.asyncio
+async def test_same_date_transactions_ordered_by_posted_at_desc(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Same-date transactions must be ordered by posted_at DESC (newest first).
+
+    Why this test: transaction_date alone does not break ties when multiple
+    transactions share the same date. posted_at (set to datetime.now(UTC) at
+    write time) is the secondary sort key. Without this test, a regression
+    from .desc() to .asc() on posted_at would go undetected.
+    Inserts three transactions sequentially (each POST is awaited) so
+    posted_at is monotonically increasing: first < second < third.
+    Expected display order: third, second, first.
+    """
+    debit_id = await _seed_account(
+        db_session, "Cash-PostedAt", AccountType.ASSET, code="1130"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-PostedAt", AccountType.REVENUE, code="4030"
+    )
+
+    entries = [
+        {"account_id": debit_id, "direction": "debit", "amount": 10, "currency": "EUR"},
+        {"account_id": credit_id, "direction": "credit", "amount": 10, "currency": "EUR"},
+    ]
+    # All share the same transaction_date — only posted_at distinguishes them.
+    # Sequential awaits guarantee posted_at: first < second < third.
+    for description in ["first", "second", "third"]:
+        r = await async_client.post(
+            "/api/v1/transactions",
+            json={"transaction_date": "2024-06-01", "description": description, "entries": entries},
+        )
+        assert r.status_code == 201
+
+    response = await async_client.get("/api/v1/transactions")
+    assert response.status_code == 200
+    descriptions = [item["description"] for item in response.json()]
+    assert descriptions == ["third", "second", "first"]
