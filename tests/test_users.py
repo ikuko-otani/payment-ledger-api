@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.exceptions import ConflictError
 from app.models.user import User
+from app.repositories.audit_repository import SQLAlchemyAuditRepository
+from app.repositories.user_repository import SQLAlchemyUserRepository
 from app.schemas.user import UserCreate
 from app.services import user_service
 
@@ -75,7 +77,11 @@ async def test_create_user_concurrent_duplicate_email_returns_conflict(
     async def _attempt() -> User | ConflictError:
         async with session_factory() as session:
             try:
-                user = await user_service.create_user(session, payload)
+                user = await user_service.create_user(
+                    SQLAlchemyUserRepository(session),
+                    SQLAlchemyAuditRepository(session),
+                    payload,
+                )
                 await session.commit()
                 return user
             except ConflictError as e:

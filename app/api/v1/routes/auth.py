@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token, verify_password
-from app.db.session import get_db
-from app.models.user import User
+from app.repositories.user_repository import UserRepository, get_user_repository
 from app.schemas.auth import LoginRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repository)]
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
-    db: AsyncSession = Depends(get_db),
+    user_repo: UserRepoDep,
 ) -> TokenResponse:
-    result = await db.execute(select(User).where(User.email == payload.email))
-    user = result.scalar_one_or_none()
+    user = await user_repo.find_by_email(payload.email)
     if user is None or not await verify_password(
         payload.password, user.hashed_password
     ):

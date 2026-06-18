@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated
 
-from app.db.session import get_db
+from fastapi import APIRouter, Depends, status
+
 from app.models.user import User
+from app.repositories.audit_repository import AuditRepository, get_audit_repository
+from app.repositories.user_repository import UserRepository, get_user_repository
 from app.schemas.user import UserCreate, UserResponse
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repository)]
+AuditRepoDep = Annotated[AuditRepository, Depends(get_audit_repository)]
+
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     payload: UserCreate,
-    db: AsyncSession = Depends(get_db),
+    user_repo: UserRepoDep,
+    audit_repo: AuditRepoDep,
 ) -> User:
-    # Return the UserResponse directly (Pydantic from_attributes handles conversion)
-    return await user_service.create_user(db, payload)
+    return await user_service.create_user(user_repo, audit_repo, payload)
