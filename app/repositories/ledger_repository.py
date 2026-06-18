@@ -7,10 +7,13 @@ from abc import ABC, abstractmethod
 from datetime import date
 
 from fastapi import Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import contains_eager
 
 from app.db.session import get_db
 from app.models.entry import Entry
+from app.models.transaction import Transaction
 
 
 class LedgerRepository(ABC):
@@ -39,8 +42,31 @@ class SQLAlchemyLedgerRepository(LedgerRepository):
         limit: int,
         offset: int,
     ) -> list[Entry]:
-        # TODO: implement
-        raise NotImplementedError
+        filters = []
+        if from_date is not None:
+            filters.append(Transaction.transaction_date >= from_date)
+        if to_date is not None:
+            filters.append(Transaction.transaction_date <= to_date)
+        if account_id is not None:
+            filters.append(Entry.account_id == account_id)
+        if currency_code is not None:
+            filters.append(Entry.currency == currency_code)
+
+        stmt = (
+            select(Entry)
+            .join(Entry.transaction)
+            .options(contains_eager(Entry.transaction))
+            .where(*filters)
+            .order_by(
+                Transaction.transaction_date.desc(),
+                Transaction.posted_at.desc(),
+                Entry.id,
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().unique().all())
 
 
 def get_ledger_repository(
