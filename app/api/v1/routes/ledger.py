@@ -7,22 +7,20 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AuditorOrAdminUser
-from app.db.session import get_db
 from app.models.entry import Entry
+from app.repositories.ledger_repository import LedgerRepository, get_ledger_repository
 from app.schemas.ledger import LedgerEntryRead
-from app.services.ledger_service import get_ledger_entries
 
 router = APIRouter(prefix="/ledger", tags=["ledger"])
 
-DbDep = Annotated[AsyncSession, Depends(get_db)]
+LedgerRepoDep = Annotated[LedgerRepository, Depends(get_ledger_repository)]
 
 
 @router.get("", response_model=list[LedgerEntryRead])
 async def get_ledger(
-    db: DbDep,
+    repo: LedgerRepoDep,
     _current_user: AuditorOrAdminUser,
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
@@ -31,8 +29,7 @@ async def get_ledger(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[Entry]:
-    return await get_ledger_entries(
-        db,
+    return await repo.list_entries(
         from_date=from_date,
         to_date=to_date,
         account_id=account_id,

@@ -5,28 +5,35 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AdminUser, CurrentUser
-from app.db.session import get_db
 from app.models.currency import Currency
+from app.repositories.audit_repository import AuditRepository, get_audit_repository
+from app.repositories.currency_repository import (
+    CurrencyRepository,
+    get_currency_repository,
+)
 from app.schemas.currency import CurrencyCreate, CurrencyRead
 from app.services.currency_service import create_currency, get_currencies
 
 router = APIRouter(prefix="/currencies", tags=["currencies"])
 
-DbDep = Annotated[AsyncSession, Depends(get_db)]
+CurrencyRepoDep = Annotated[CurrencyRepository, Depends(get_currency_repository)]
+AuditRepoDep = Annotated[AuditRepository, Depends(get_audit_repository)]
 
 
 @router.get("", response_model=list[CurrencyRead])
-async def list_currencies(db: DbDep, _current_user: CurrentUser) -> list[Currency]:
-    return await get_currencies(db)
+async def list_currencies(
+    repo: CurrencyRepoDep, _current_user: CurrentUser
+) -> list[Currency]:
+    return await get_currencies(repo)
 
 
 @router.post("", response_model=CurrencyRead, status_code=201)
 async def post_currency(
     payload: CurrencyCreate,
-    db: DbDep,
+    repo: CurrencyRepoDep,
+    audit_repo: AuditRepoDep,
     current_user: AdminUser,
 ) -> Currency:
-    return await create_currency(db, payload, current_user)
+    return await create_currency(repo, audit_repo, payload, current_user)
