@@ -14,12 +14,12 @@ from app.models.account import Account, AccountType
 from app.models.audit_log import AuditLog
 from app.models.entry import Direction
 from app.models.transaction import Transaction
-from app.schemas.transaction import EntryCreate, TransactionCreate
-from app.services.transaction_service import create_transaction
 from app.repositories.account_repository import SQLAlchemyAccountRepository
 from app.repositories.audit_repository import SQLAlchemyAuditRepository
 from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
 from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
+from app.schemas.transaction import EntryCreate, TransactionCreate
+from app.services.transaction_service import create_transaction
 
 
 async def _seed_account(

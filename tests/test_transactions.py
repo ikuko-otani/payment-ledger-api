@@ -142,7 +142,12 @@ async def test_unbalanced_transaction_raises_http_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
 
     assert exc_info.value.status_code == 422
@@ -282,7 +287,12 @@ async def test_unknown_account_id_raises_http_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
 
     assert exc_info.value.status_code == 422
@@ -321,7 +331,12 @@ async def test_all_debit_entries_raises_http_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
 
     assert exc_info.value.status_code == 422
@@ -361,7 +376,12 @@ async def test_all_credit_entries_raises_http_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
 
     assert exc_info.value.status_code == 422
@@ -405,7 +425,12 @@ async def test_inactive_account_raises_http_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
     assert exc_info.value.status_code == 422
 
@@ -443,7 +468,12 @@ async def test_mixed_currency_entries_raises_http_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
 
     assert exc_info.value.status_code == 422
@@ -483,7 +513,12 @@ async def test_entry_currency_mismatched_with_account_returns_422(
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
         await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=uuid.uuid4(),
         )
 
     assert exc_info.value.status_code == 422
@@ -570,7 +605,12 @@ async def test_non_usd_transaction_resolves_conversion_rate_once(
     event.listen(engine.sync_engine, "before_cursor_execute", _capture)
     try:
         tx = await create_transaction(
-            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=test_user_id
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=test_user_id,
         )
     finally:
         event.remove(engine.sync_engine, "before_cursor_execute", _capture)

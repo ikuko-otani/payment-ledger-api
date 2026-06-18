@@ -6,7 +6,6 @@ import uuid
 from datetime import date
 from typing import Any
 
-from app.core.exceptions import ConflictError
 from app.models.currency import Currency
 from app.models.exchange_rate import ExchangeRate
 from app.repositories.audit_repository import AuditRepository
