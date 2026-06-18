@@ -17,6 +17,10 @@ from app.models.entry import Direction
 from app.models.exchange_rate import ExchangeRate
 from app.models.transaction import Transaction
 from app.models.user import User, UserRole
+from app.repositories.account_repository import SQLAlchemyAccountRepository
+from app.repositories.audit_repository import SQLAlchemyAuditRepository
+from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
+from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
 from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
 
@@ -38,6 +42,15 @@ async def _create_account(
     await db_session.commit()
     await db_session.refresh(account)
     return account
+
+
+def _make_repos(db_session: AsyncSession):
+    return (
+        SQLAlchemyAccountRepository(db_session),
+        SQLAlchemyCurrencyRepository(db_session),
+        SQLAlchemyTransactionRepository(db_session),
+        SQLAlchemyAuditRepository(db_session),
+    )
 
 
 @pytest.mark.asyncio
@@ -63,7 +76,6 @@ async def test_create_balanced_transaction_persists_rows(
     payload = TransactionCreate(
         description="Balanced",
         transaction_date=date(2024, 1, 1),
-        # amount removed from TransactionCreate
         entries=[
             EntryCreate(
                 account_id=debit.id,
@@ -80,7 +92,10 @@ async def test_create_balanced_transaction_persists_rows(
         ],
     )
 
-    tx = await create_transaction(db_session, payload, user_id=test_user_id)
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    tx = await create_transaction(
+        account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=test_user_id
+    )
     await db_session.commit()
 
     result = await db_session.execute(
@@ -118,14 +133,17 @@ async def test_unbalanced_transaction_raises_http_422(
             EntryCreate(
                 account_id=credit.id,
                 direction=Direction.CREDIT,
-                amount=500,  # intentionally unbalanced
+                amount=500,
                 currency="EUR",
             ),
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
 
     assert exc_info.value.status_code == 422
     assert "balanced" in str(exc_info.value.detail).lower()
@@ -178,7 +196,10 @@ async def test_transaction_response_shape_like_domain_object(
         ],
     )
 
-    tx = await create_transaction(db_session, payload, user_id=uuid.uuid4())
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    tx = await create_transaction(
+        account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+    )
 
     assert len(tx.entries) == 2
     entry_directions = {entry.direction for entry in tx.entries}
@@ -192,7 +213,6 @@ async def test_transaction_response_shape_like_domain_object(
 
 @pytest.mark.asyncio
 async def test_entry_amount_zero_raises_validation_error() -> None:
-    """amount=0 must be rejected by Pydantic schema."""
     with pytest.raises(ValueError):
         EntryCreate(
             account_id="11111111-1111-1111-1111-111111111111",
@@ -204,7 +224,6 @@ async def test_entry_amount_zero_raises_validation_error() -> None:
 
 @pytest.mark.asyncio
 async def test_entry_amount_negative_raises_validation_error() -> None:
-    """amount < 0 must be rejected by Pydantic schema."""
     with pytest.raises(ValueError):
         EntryCreate(
             account_id="11111111-1111-1111-1111-111111111111",
@@ -216,7 +235,6 @@ async def test_entry_amount_negative_raises_validation_error() -> None:
 
 @pytest.mark.asyncio
 async def test_description_blank_raises_validation_error() -> None:
-    """Blank description must be rejected by Pydantic schema."""
     with pytest.raises(ValueError):
         TransactionCreate(
             description="   ",
@@ -242,7 +260,6 @@ async def test_description_blank_raises_validation_error() -> None:
 async def test_unknown_account_id_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    """account_id not in accounts table must be rejected by service layer."""
     payload = TransactionCreate(
         description="Ghost account",
         transaction_date=date(2024, 1, 1),
@@ -262,8 +279,11 @@ async def test_unknown_account_id_raises_http_422(
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
 
     assert exc_info.value.status_code == 422
 
@@ -298,8 +318,11 @@ async def test_all_debit_entries_raises_http_422(
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
 
     assert exc_info.value.status_code == 422
     assert "debit" in str(exc_info.value.detail).lower()
@@ -335,8 +358,11 @@ async def test_all_credit_entries_raises_http_422(
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
 
     assert exc_info.value.status_code == 422
     assert "credit" in str(exc_info.value.detail).lower()
@@ -346,7 +372,6 @@ async def test_all_credit_entries_raises_http_422(
 async def test_inactive_account_raises_http_422(
     db_session: AsyncSession,
 ) -> None:
-    """Posting to an is_active=False account must be rejected with 422 (TD-011)."""
     debit = await _create_account(
         db_session, "Cash-Inactive", AccountType.ASSET, code="1130"
     )
@@ -377,8 +402,11 @@ async def test_inactive_account_raises_http_422(
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
     assert exc_info.value.status_code == 422
 
 
@@ -412,8 +440,11 @@ async def test_mixed_currency_entries_raises_http_422(
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
 
     assert exc_info.value.status_code == 422
     assert "currency" in str(exc_info.value.detail).lower()
@@ -423,7 +454,6 @@ async def test_mixed_currency_entries_raises_http_422(
 async def test_entry_currency_mismatched_with_account_returns_422(
     db_session: AsyncSession,
 ) -> None:
-    """Entry currency must match its account's currency (TD-024)."""
     debit = await _create_account(
         db_session, "Cash-EUR-Acct", AccountType.ASSET, code="1140", currency="EUR"
     )
@@ -450,8 +480,11 @@ async def test_entry_currency_mismatched_with_account_returns_422(
         ],
     )
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     with pytest.raises(ValidationError) as exc_info:
-        await create_transaction(db_session, payload, user_id=uuid.uuid4())
+        await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=uuid.uuid4()
+        )
 
     assert exc_info.value.status_code == 422
     assert "currency" in str(exc_info.value.detail).lower()
@@ -462,13 +495,6 @@ async def test_non_usd_transaction_resolves_conversion_rate_once(
     db_session: AsyncSession,
     engine: AsyncEngine,
 ) -> None:
-    """TD-030: conversion rate is resolved once per transaction, not once per entry.
-
-    Before the fix, _get_converted_amount_usd ran up to 3 queries
-    (currencies x2 + exchange_rates x1) PER ENTRY. With 4 entries that would
-    be up to 12 queries against currencies/exchange_rates. After the fix,
-    the rate is resolved once regardless of entry count -- at most 3.
-    """
     eur = Currency(code="EUR", name="Euro", decimal_places=2)
     usd = Currency(code="USD", name="US Dollar", decimal_places=2)
     db_session.add_all([eur, usd])
@@ -540,9 +566,12 @@ async def test_non_usd_transaction_resolves_conversion_rate_once(
     def _capture(conn, cursor, statement, parameters, context, executemany):
         statements.append(statement)
 
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     event.listen(engine.sync_engine, "before_cursor_execute", _capture)
     try:
-        tx = await create_transaction(db_session, payload, user_id=test_user_id)
+        tx = await create_transaction(
+            account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=test_user_id
+        )
     finally:
         event.remove(engine.sync_engine, "before_cursor_execute", _capture)
 
@@ -553,5 +582,4 @@ async def test_non_usd_transaction_resolves_conversion_rate_once(
     ]
     assert len(conversion_queries) <= 3
 
-    # 500 * 1.10 = 550, applied to every entry
     assert all(e.converted_amount_usd == 550 for e in tx.entries)
