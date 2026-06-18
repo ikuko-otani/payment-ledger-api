@@ -15,18 +15,14 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.core.exceptions import ValidationError
-from app.models.account import Account
-from app.models.currency import Currency
 from app.models.entry import Direction, Entry
-from app.models.exchange_rate import ExchangeRate
 from app.models.transaction import Transaction, TransactionStatus
+from app.repositories.account_repository import AccountRepository
+from app.repositories.audit_repository import AuditRepository
+from app.repositories.currency_repository import CurrencyRepository
+from app.repositories.transaction_repository import TransactionRepository
 from app.schemas.transaction import TransactionCreate
-from app.services.audit_service import log_action
 
 # Base currency: all amounts are converted to USD cents at write time.
 # Changing this constant requires a full data migration — treat as immutable.
@@ -34,7 +30,7 @@ BASE_CURRENCY = "USD"
 
 
 async def _resolve_usd_conversion_rate(
-    db: AsyncSession,
+    currency_repo: CurrencyRepository,
     currency_code: str,
     transaction_date: date,
 ) -> Decimal:
@@ -51,31 +47,19 @@ async def _resolve_usd_conversion_rate(
     if currency_code == BASE_CURRENCY:
         return Decimal("1")
 
-    # Resolve from_currency UUID
-    from_result = await db.execute(
-        select(Currency).where(Currency.code == currency_code)
-    )
-    from_currency = from_result.scalar_one_or_none()
+    from_currency = await currency_repo.find_by_code(currency_code)
     if from_currency is None:
         raise ValidationError(detail=f"Unknown currency code: {currency_code!r}")
 
-    # Resolve to_currency (USD) UUID
-    to_result = await db.execute(select(Currency).where(Currency.code == BASE_CURRENCY))
-    to_currency = to_result.scalar_one_or_none()
+    to_currency = await currency_repo.find_by_code(BASE_CURRENCY)
     if to_currency is None:
         raise ValidationError(
             detail=f"Base currency {BASE_CURRENCY!r} not found in currencies table"
         )
 
-    # Look up ExchangeRate for (from, to, date)
-    rate_result = await db.execute(
-        select(ExchangeRate).where(
-            ExchangeRate.from_currency_id == from_currency.id,
-            ExchangeRate.to_currency_id == to_currency.id,
-            ExchangeRate.effective_date == transaction_date,
-        )
+    exchange_rate = await currency_repo.find_exchange_rate(
+        from_currency.id, to_currency.id, transaction_date
     )
-    exchange_rate = rate_result.scalar_one_or_none()
     if exchange_rate is None:
         raise ValidationError(
             detail=(
@@ -93,7 +77,10 @@ def _convert_amount_usd(amount: int, rate: Decimal) -> int:
 
 
 async def create_transaction(
-    db: AsyncSession,
+    account_repo: AccountRepository,
+    currency_repo: CurrencyRepository,
+    tx_repo: TransactionRepository,
+    audit_repo: AuditRepository,
     payload: TransactionCreate,
     user_id: uuid.UUID,
 ) -> Transaction:
@@ -103,13 +90,7 @@ async def create_transaction(
     # Validate: all account_ids must exist in the accounts table
     # ------------------------------------------------------------------
     account_ids = {e.account_id for e in payload.entries}
-    result = await db.execute(
-        select(Account.id, Account.currency).where(
-            Account.id.in_(account_ids),
-            Account.is_active.is_(True),
-        )
-    )
-    found_ids = {account_id: currency for account_id, currency in result.all()}
+    found_ids = await account_repo.find_active_by_ids(account_ids)
     missing = account_ids - found_ids.keys()
     if missing:
         raise ValidationError(
@@ -164,7 +145,7 @@ async def create_transaction(
         )
 
     # ------------------------------------------------------------------
-    # Persist
+    # Build domain objects
     # ------------------------------------------------------------------
     transaction = Transaction(
         description=payload.description,
@@ -172,22 +153,20 @@ async def create_transaction(
         status=TransactionStatus.POSTED,
         posted_at=datetime.now(UTC),
     )
-    db.add(transaction)
-    await db.flush()
 
     # ------------------------------------------------------------------
     # Resolve USD conversion rate once per transaction
     # ------------------------------------------------------------------
     conversion_rate = await _resolve_usd_conversion_rate(
-        db, payload.currency_code, payload.transaction_date
+        currency_repo, payload.currency_code, payload.transaction_date
     )
     converted_amounts = [
         _convert_amount_usd(entry.amount, conversion_rate) for entry in payload.entries
     ]
 
+    # transaction_id is set by tx_repo.save() after the first flush
     entries = [
         Entry(
-            transaction_id=transaction.id,
             account_id=entry.account_id,
             direction=entry.direction,
             amount=entry.amount,
@@ -198,15 +177,11 @@ async def create_transaction(
             payload.entries, converted_amounts, strict=True
         )
     ]
-    db.add_all(entries)
-    await db.flush()
 
-    tx_result = await db.execute(
-        select(Transaction)
-        .where(Transaction.id == transaction.id)
-        .options(selectinload(Transaction.entries))
-    )
-    loaded = tx_result.scalar_one()
+    # ------------------------------------------------------------------
+    # Persist via repository
+    # ------------------------------------------------------------------
+    loaded = await tx_repo.save(transaction, entries)
 
     after_value: dict[str, Any] = {
         "id": str(loaded.id),
@@ -214,8 +189,7 @@ async def create_transaction(
         "status": loaded.status.value,
         "transaction_date": str(loaded.transaction_date),
     }
-    await log_action(
-        db,
+    await audit_repo.log(
         user_id=user_id,
         entity_type="transaction",
         entity_id=loaded.id,

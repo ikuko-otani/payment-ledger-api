@@ -1,12 +1,4 @@
-"""Integration tests: multi-currency transactions and pagination boundary.
-
-Covers:
-  - EUR/JPY → USD conversion stored in converted_amount_usd
-  - ROUND_HALF_UP applied when conversion produces fractional USD-cents
-  - Pagination boundary: no duplicate IDs across pages (TD-025 fix regression)
-  - Offset beyond total count returns 200 + empty list (not 404)
-  - GET /currencies returns currencies in ascending code order (TD-033 fix regression)
-"""
+"""Integration tests: multi-currency transactions and pagination boundary."""
 
 from __future__ import annotations
 
@@ -23,12 +15,12 @@ from app.models.currency import Currency
 from app.models.entry import Direction
 from app.models.exchange_rate import ExchangeRate
 from app.models.user import User, UserRole
+from app.repositories.account_repository import SQLAlchemyAccountRepository
+from app.repositories.audit_repository import SQLAlchemyAuditRepository
+from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
+from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
 from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
-
-# ---------------------------------------------------------------------------
-# Seed helpers (flush only — caller commits after all setup is done)
-# ---------------------------------------------------------------------------
 
 
 async def _seed_currency(
@@ -82,20 +74,19 @@ async def _seed_account(
     return account
 
 
-# ---------------------------------------------------------------------------
-# Multi-currency conversion tests (service layer)
-# ---------------------------------------------------------------------------
+def _make_repos(db_session: AsyncSession):
+    return (
+        SQLAlchemyAccountRepository(db_session),
+        SQLAlchemyCurrencyRepository(db_session),
+        SQLAlchemyTransactionRepository(db_session),
+        SQLAlchemyAuditRepository(db_session),
+    )
 
 
 @pytest.mark.asyncio
 async def test_eur_transaction_sets_converted_amount_usd(
     db_session: AsyncSession,
 ) -> None:
-    """EUR entries are stored with converted_amount_usd = amount × rate (ROUND_HALF_UP).
-
-    Rate 1.10, amount 1000 EUR-cents → expected 1100 USD-cents.
-    Verifies the full path: exchange-rate lookup → _convert_amount_usd → Entry.converted_amount_usd.
-    """
     eur = await _seed_currency(db_session, "EUR", "Euro", 2)
     usd = await _seed_currency(db_session, "USD", "US Dollar", 2)
     user = await _seed_user(db_session, "eur-conv@example.com")
@@ -135,9 +126,11 @@ async def test_eur_transaction_sets_converted_amount_usd(
         ],
     )
 
-    tx = await create_transaction(db_session, payload, user_id=user.id)
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    tx = await create_transaction(
+        account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=user.id
+    )
 
-    # 1000 × 1.10 = 1100.00 → ROUND_HALF_UP → 1100
     assert all(e.converted_amount_usd == 1100 for e in tx.entries)
 
 
@@ -145,13 +138,6 @@ async def test_eur_transaction_sets_converted_amount_usd(
 async def test_jpy_transaction_converted_amount_usd_rounded_half_up(
     db_session: AsyncSession,
 ) -> None:
-    """JPY (integer currency) amounts are rounded ROUND_HALF_UP when converted to USD-cents.
-
-    Rate 0.5, amount ¥5 → 5 × 0.5 = 2.5 → ROUND_HALF_UP → 3.
-    ROUND_HALF_EVEN (banker's rounding) would give 2 (rounds to nearest even).
-    ROUND_DOWN would also give 2.
-    Using 2.5 as the midpoint makes all three rounding modes distinguishable.
-    """
     jpy = await _seed_currency(db_session, "JPY", "Japanese Yen", 0)
     usd = await _seed_currency(db_session, "USD", "US Dollar", 2)
     user = await _seed_user(db_session, "jpy-conv@example.com")
@@ -191,15 +177,12 @@ async def test_jpy_transaction_converted_amount_usd_rounded_half_up(
         ],
     )
 
-    tx = await create_transaction(db_session, payload, user_id=user.id)
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    tx = await create_transaction(
+        account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=user.id
+    )
 
-    # 5 × 0.5 = 2.5 → ROUND_HALF_UP → 3  (ROUND_HALF_EVEN would give 2)
     assert all(e.converted_amount_usd == 3 for e in tx.entries)
-
-
-# ---------------------------------------------------------------------------
-# Pagination boundary tests (HTTP layer)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -207,17 +190,6 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Transactions must not appear on both page 1 and page 2, and must be date-ordered.
-
-    Why this test: without a deterministic ORDER BY (pre-TD-025), limit/offset
-    pagination with concurrent writes can return the same row twice or skip rows.
-    Seeds 4 transactions with distinct dates in non-chronological insertion order,
-    then asserts:
-      1. page-1 IDs and page-2 IDs are disjoint (no duplicates)
-      2. page-1 dates are in descending order (newest first)
-    Inserting in non-chronological order ensures the ORDER BY is actually sorting,
-    not relying on insertion order.
-    """
     debit = await _seed_account(
         db_session, "Cash Pag", AccountType.ASSET, "PAG-1100", "EUR"
     )
@@ -240,8 +212,6 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
             "currency": "EUR",
         },
     ]
-    # Insert in non-chronological order to verify ORDER BY is sorting, not relying on
-    # insertion order. Expected display order (date desc): 06-04, 06-03, 06-02, 06-01.
     for tx_date, description in [
         ("2024-06-02", "pag-middle"),
         ("2024-06-04", "pag-newest"),
@@ -275,7 +245,6 @@ async def test_list_transactions_pagination_no_duplicates_across_pages(
     assert len(ids_p2) == 1
     assert ids_p1.isdisjoint(ids_p2), f"Duplicate IDs across pages: {ids_p1 & ids_p2}"
 
-    # Verify date descending order across page 1
     dates_p1 = [item["transaction_date"] for item in p1.json()]
     assert dates_p1 == ["2024-06-04", "2024-06-03", "2024-06-02"]
 
@@ -285,12 +254,6 @@ async def test_list_transactions_offset_beyond_total_returns_empty(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """GET /transactions with offset > total count returns 200 + empty list (not 404).
-
-    Why this test: a common mistake is to 404 when offset exceeds the result set.
-    REST pagination convention is 200 + empty list — clients use this to detect
-    the last page without needing a separate total-count endpoint.
-    """
     debit = await _seed_account(
         db_session, "Cash Empty", AccountType.ASSET, "EMP-1100", "EUR"
     )
@@ -329,23 +292,11 @@ async def test_list_transactions_offset_beyond_total_returns_empty(
     assert response.json() == []
 
 
-# ---------------------------------------------------------------------------
-# Currency list ordering test (TD-033 regression)
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_currencies_list_returns_stable_ascending_order(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """GET /currencies returns currencies ordered by code ascending (TD-033 fix regression).
-
-    Why this test: before the TD-033 fix, get_currencies had no ORDER BY and returned
-    rows in PostgreSQL heap-scan order — non-deterministic under concurrent inserts.
-    Seeds currencies in reverse-alphabetical order (USD, JPY, EUR) to confirm the DB
-    re-sorts them, not returning insertion order.
-    """
     for code, name, dp in [
         ("USD", "US Dollar", 2),
         ("JPY", "Japanese Yen", 0),

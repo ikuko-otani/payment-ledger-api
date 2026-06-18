@@ -14,6 +14,10 @@ from app.models.account import Account, AccountType
 from app.models.audit_log import AuditLog
 from app.models.entry import Direction
 from app.models.transaction import Transaction
+from app.repositories.account_repository import SQLAlchemyAccountRepository
+from app.repositories.audit_repository import SQLAlchemyAuditRepository
+from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
+from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
 from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
 
@@ -207,9 +211,21 @@ async def test_audit_failure_rolls_back_transaction(
         ],
     )
 
+    account_repo = SQLAlchemyAccountRepository(db_session)
+    currency_repo = SQLAlchemyCurrencyRepository(db_session)
+    tx_repo = SQLAlchemyTransactionRepository(db_session)
+    audit_repo = SQLAlchemyAuditRepository(db_session)
+
     nonexistent_user_id = uuid.uuid4()
     with pytest.raises((IntegrityError, Exception)):
-        await create_transaction(db_session, payload, user_id=nonexistent_user_id)
+        await create_transaction(
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=nonexistent_user_id,
+        )
         await db_session.flush()
 
     await db_session.rollback()
