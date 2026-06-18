@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models.account import Account
+from app.repositories.account_repository import AccountRepository
+from app.repositories.audit_repository import AuditRepository
 from app.schemas.account import AccountCreate
 from app.schemas.token import TokenUser
-from app.services.audit_service import log_action
 
 
 async def create_account(
-    db: AsyncSession,
+    repo: AccountRepository,
+    audit_repo: AuditRepository,
     payload: AccountCreate,
     current_user: TokenUser,
 ) -> Account:
@@ -23,24 +23,21 @@ async def create_account(
         account_type=payload.account_type,
         currency=payload.currency,
     )
-    db.add(account)
-    await db.flush()
-    await db.refresh(account)
+    saved = await repo.save(account)
 
     after_value: dict[str, Any] = {
-        "id": str(account.id),
-        "code": account.code,
-        "name": account.name,
-        "account_type": account.account_type.value,
-        "currency": account.currency,
+        "id": str(saved.id),
+        "code": saved.code,
+        "name": saved.name,
+        "account_type": saved.account_type.value,
+        "currency": saved.currency,
     }
-    await log_action(
-        db,
+    await audit_repo.log(
         user_id=current_user.id,
         entity_type="account",
-        entity_id=account.id,
+        entity_id=saved.id,
         action="create",
         before=None,
         after=after_value,
     )
-    return account
+    return saved
