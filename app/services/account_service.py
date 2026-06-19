@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.exceptions import ValidationError
 from app.models.account import Account
 from app.repositories.account_repository import AccountRepository
 from app.repositories.audit_repository import AuditRepository
+from app.repositories.currency_repository import CurrencyRepository
 from app.schemas.account import AccountCreate
 from app.schemas.token import TokenUser
 
@@ -14,9 +16,13 @@ from app.schemas.token import TokenUser
 async def create_account(
     repo: AccountRepository,
     audit_repo: AuditRepository,
+    currency_repo: CurrencyRepository,
     payload: AccountCreate,
     current_user: TokenUser,
 ) -> Account:
+    if await currency_repo.find_by_code(payload.currency) is None:
+        raise ValidationError(detail=f"Unknown currency code: {payload.currency!r}")
+
     account = Account(
         code=payload.code,
         name=payload.name,

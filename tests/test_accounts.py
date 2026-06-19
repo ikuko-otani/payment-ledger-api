@@ -139,3 +139,21 @@ async def test_list_accounts_returns_rows_ordered_by_code(
     codes = [item["code"] for item in response.json()]
 
     assert codes == ["1000", "2000", "3000"]
+
+
+@pytest.mark.asyncio
+async def test_create_account_unknown_currency_returns_422(
+    async_client: AsyncClient,
+) -> None:
+    """POST /accounts with a currency code not in currencies table returns 422."""
+    resp = await async_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "9999",
+            "name": "InvalidCurrencyAccount",
+            "account_type": "asset",
+            "currency": "XYZ",
+        },
+    )
+    assert resp.status_code == 422
+    assert "XYZ" in resp.json()["detail"]

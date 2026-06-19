@@ -114,6 +114,16 @@ async def clean_db(engine: AsyncEngine) -> AsyncGenerator[None, None]:
                 "transactions, accounts, users, currencies CASCADE"
             )
         )
+        # Seed standard currencies so FK constraints on accounts.currency /
+        # entries.currency are satisfied without per-test setup.
+        await conn.execute(
+            text(
+                "INSERT INTO currencies (id, code, name, decimal_places) VALUES "
+                "(gen_random_uuid(), 'USD', 'US Dollar', 2), "
+                "(gen_random_uuid(), 'EUR', 'Euro', 2), "
+                "(gen_random_uuid(), 'JPY', 'Japanese Yen', 0)"
+            )
+        )
 
     yield
 

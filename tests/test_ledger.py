@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
@@ -18,10 +19,10 @@ _FIXTURE_ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 async def _seed_eur_rate(db: AsyncSession, tx_date: str) -> None:
-    eur = Currency(code="EUR", name="Euro", decimal_places=2)
-    usd = Currency(code="USD", name="US Dollar", decimal_places=2)
-    db.add_all([eur, usd])
-    await db.flush()
+    result = await db.execute(select(Currency).where(Currency.code.in_(["EUR", "USD"])))
+    currencies = {c.code: c for c in result.scalars().all()}
+    eur = currencies["EUR"]
+    usd = currencies["USD"]
     db.add(
         ExchangeRate(
             from_currency_id=eur.id,

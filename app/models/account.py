@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, String, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -46,7 +46,11 @@ class Account(Base):
         nullable=False,
     )
     # purpose: ISO 4217 code e.g. "EUR", "USD", "JPY"
-    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        ForeignKey("currencies.code"),
+        nullable=False,
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
