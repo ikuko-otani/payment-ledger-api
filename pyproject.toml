@@ -31,11 +31,16 @@ dev = [
   "ruff>=0.9",
   "mypy>=2.1.0",
   "pip-audit>=2.10.1",
+  "poethepoet>=0.46.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85"
+
+[tool.coverage.run]
+source = ["app"]
+core = "sysmon"
 
 [tool.ruff]
 target-version = "py312"
@@ -53,6 +58,12 @@ known-first-party = ["app"]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
+[tool.poe.tasks]
+lint = "ruff check ."
+format = "ruff format ."
+typecheck = "mypy app/"
+check = { sequence = ["format", "lint", "typecheck"] }
 
 [tool.uv]
 link-mode = "copy"
