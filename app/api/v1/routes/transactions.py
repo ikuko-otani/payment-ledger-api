@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AdminUser, AuditorOrAdminUser
@@ -58,9 +59,12 @@ async def post_transaction(
     tx_repo: TransactionRepoDep,
     audit_repo: AuditRepoDep,
     redis: RedisDep,
-    _: IdempotencyDep,
+    idempotency: IdempotencyDep,
     current_user: AdminUser,
-) -> Transaction:
+) -> Transaction | JSONResponse:
+    if idempotency.replay is not None:
+        return JSONResponse(content=idempotency.replay, status_code=200)
+
     transaction = await create_transaction(
         account_repo, currency_repo, tx_repo, audit_repo, payload, current_user.id
     )
@@ -70,4 +74,8 @@ async def post_transaction(
         keys = await redis.keys(pattern)
         if keys:
             await redis.delete(*keys)
+
+    response_data = TransactionRead.model_validate(transaction).model_dump(mode="json")
+    await idempotency.cache(response_data)
+
     return transaction
