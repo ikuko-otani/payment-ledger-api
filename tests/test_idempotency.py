@@ -24,11 +24,11 @@ async def full_flow_client(async_client: AsyncClient) -> AsyncClient:
     yield async_client
 
 
-async def test_same_idempotency_key_returns_409_on_second_request(
+async def test_same_idempotency_key_replays_200_on_second_request(
     idempotent_client: AsyncClient,
-    async_client: AsyncClient,
     db_session,
 ) -> None:
+    """Duplicate request with the same key returns 200 + the original response body (Stripe-style)."""
     from tests.test_transactions import _create_account as create_account
 
     acc_debit = await create_account(
@@ -62,14 +62,13 @@ async def test_same_idempotency_key_returns_409_on_second_request(
     r1 = await idempotent_client.post(
         "/api/v1/transactions", json=payload, headers=headers
     )
-    print(r1.json())
     assert r1.status_code == 201
 
     r2 = await idempotent_client.post(
         "/api/v1/transactions", json=payload, headers=headers
     )
-    assert r2.status_code == 409
-    assert "Idempotency-Key" in r2.json()["detail"]
+    assert r2.status_code == 200
+    assert r2.json() == r1.json()
 
 
 async def test_different_idempotency_keys_both_succeed(
