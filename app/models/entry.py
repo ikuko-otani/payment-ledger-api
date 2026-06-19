@@ -55,6 +55,7 @@ class Entry(Base):
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(
         String(3),
+        ForeignKey("currencies.code"),
         nullable=False,  # ISO 4217 code e.g. "EUR", "USD", "JPY"
     )
     converted_amount_usd: Mapped[int] = mapped_column(
