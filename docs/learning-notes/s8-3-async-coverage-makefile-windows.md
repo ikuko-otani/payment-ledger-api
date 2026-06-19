@@ -131,4 +131,51 @@ git commit -m "docs(s8-3): close TD-013 and TD-014"
 
 ## Key Takeaways
 
-*(To be added in Step D after PR is merged.)*
+### What did I learn?
+
+I learned why async code is under-reported by coverage.py by default. The root cause is that
+`sys.settrace` — Python's traditional trace hook — does not re-fire when a coroutine resumes
+after an `await`. Python 3.12 introduced `sys.monitoring` (PEP 669) which fires at the bytecode
+level, including on coroutine resume (`RESUME` opcode). Setting `core = "sysmon"` in
+`[tool.coverage.run]` tells coverage.py 7.x to use this new backend, and it required only four
+lines in `pyproject.toml` with no code changes at all.
+
+I also learned how `poethepoet` integrates with `pyproject.toml` to provide cross-platform task
+running. Tasks are defined as strings (single command) or `{ sequence = [...] }` (composite), and
+invoked via `uv run poe <task>`. The project's virtual environment is automatically used — no
+`uv run` prefix needed inside the task body.
+
+### What would I do differently?
+
+The S5-6 attempt to fix TD-013 used `concurrency = ["asyncio", "thread"]`, but that option
+addresses multi-threading/multi-processing scenarios, not coroutine suspension. If I had
+understood the `sys.settrace` vs `sys.monitoring` distinction earlier, I would have gone straight
+to `core = "sysmon"` instead of trying `concurrency`. Next time I see a coverage gap in async
+code, this is the first thing I would check.
+
+### What surprised me?
+
+I was surprised that `core = "sysmon"` in `pyproject.toml` worked with zero warnings the first
+time. I expected there might be a version compatibility issue (it was added in coverage.py 7.x)
+or that only the environment variable form (`COVERAGE_CORE=sysmon`) would be accepted. Having a
+`pyproject.toml`-native config key for it is cleaner than setting an environment variable.
+
+I was also surprised how little code was required for the whole goal: only config additions
+and a file deletion. Both TD items closed with no production code changes.
+
+### What is worth remembering for future goals?
+
+1. **`[tool.coverage.run] core = "sysmon"`** — the one-line fix for async coverage
+   under-reporting in Python 3.12+. Add this immediately when starting a project that uses async.
+
+2. **`concurrency` vs `core` are different axes** — `concurrency` handles thread/greenlet/gevent
+   scenarios; `core` selects the tracing backend. They solve different problems. Do not confuse
+   them.
+
+3. **`poethepoet` sequence task syntax** — `{ sequence = ["task1", "task2"] }` as a TOML
+   inline table is the way to define a composite task. Each element references another named task,
+   not a shell command.
+
+4. **Tooling goals are small but high-leverage** — removing the Makefile and adding poe tasks
+   reduced the onboarding friction for Windows developers to zero. Small configuration changes
+   can have a disproportionately large impact on day-to-day workflow.
