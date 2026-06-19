@@ -332,9 +332,20 @@ When the developer brings in instructions from external docs, translate:
 - Details: `docs/troubleshooting/pytest-testcontainers-host-vs-docker-session-lifecycle.md`
 - Pre-pytest workflow: see `docs/pre-pytest-checklist.md`
   (ruff format → ruff check → mypy → pytest)
-  - Note: ruff/mypy are not yet configured in `pyproject.toml` — see `tech-debt.md`.
 
-### 6.6 Known error patterns
+### 6.6 Task runner (cross-platform)
+
+All lint/format/typecheck tasks are defined in `[tool.poe.tasks]` in `pyproject.toml`
+and run via `poethepoet` — works on Windows, Linux, and macOS without any additional tools.
+
+| Task | Command | Equivalent |
+|------|---------|-----------|
+| Format | `uv run poe format` | `uv run ruff format .` |
+| Lint | `uv run poe lint` | `uv run ruff check .` |
+| Type check | `uv run poe typecheck` | `uv run mypy app/` |
+| All checks | `uv run poe check` | format → lint → typecheck in sequence |
+
+### 6.7 Known error patterns
 
 Before debugging, check `docs/troubleshooting/`:
 
