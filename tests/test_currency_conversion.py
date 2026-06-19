@@ -41,7 +41,15 @@ async def _seed_account(
 async def _seed_currency(
     client: AsyncClient, code: str, name: str, decimal_places: int
 ) -> str:
-    """POST /currencies and return the created currency id."""
+    """Return the currency id for the given code, creating it if it doesn't exist.
+
+    conftest clean_db seeds USD/EUR/JPY; this helper is idempotent so tests
+    work whether or not the currency was pre-seeded.
+    """
+    existing = (await client.get("/api/v1/currencies")).json()
+    for c in existing:
+        if c["code"] == code:
+            return c["id"]
     resp = await client.post(
         "/api/v1/currencies",
         json={"code": code, "name": name, "decimal_places": decimal_places},

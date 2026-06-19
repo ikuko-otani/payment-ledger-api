@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account, AccountType
@@ -26,6 +27,10 @@ from app.services.transaction_service import create_transaction
 async def _seed_currency(
     db: AsyncSession, code: str, name: str, decimal_places: int
 ) -> Currency:
+    result = await db.execute(select(Currency).where(Currency.code == code))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     c = Currency(code=code, name=name, decimal_places=decimal_places)
     db.add(c)
     await db.flush()
@@ -295,16 +300,8 @@ async def test_list_transactions_offset_beyond_total_returns_empty(
 @pytest.mark.asyncio
 async def test_currencies_list_returns_stable_ascending_order(
     async_client: AsyncClient,
-    db_session: AsyncSession,
 ) -> None:
-    for code, name, dp in [
-        ("USD", "US Dollar", 2),
-        ("JPY", "Japanese Yen", 0),
-        ("EUR", "Euro", 2),
-    ]:
-        db_session.add(Currency(code=code, name=name, decimal_places=dp))
-    await db_session.commit()
-
+    # USD/EUR/JPY are seeded by clean_db fixture
     response = await async_client.get("/api/v1/currencies")
 
     assert response.status_code == 200

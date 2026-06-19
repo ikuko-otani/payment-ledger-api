@@ -530,10 +530,12 @@ async def test_non_usd_transaction_resolves_conversion_rate_once(
     db_session: AsyncSession,
     engine: AsyncEngine,
 ) -> None:
-    eur = Currency(code="EUR", name="Euro", decimal_places=2)
-    usd = Currency(code="USD", name="US Dollar", decimal_places=2)
-    db_session.add_all([eur, usd])
-    await db_session.flush()
+    result = await db_session.execute(
+        select(Currency).where(Currency.code.in_(["EUR", "USD"]))
+    )
+    currencies = {c.code: c for c in result.scalars().all()}
+    eur = currencies["EUR"]
+    usd = currencies["USD"]
 
     test_user_id = uuid.uuid4()
     db_session.add(

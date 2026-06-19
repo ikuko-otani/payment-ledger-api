@@ -108,7 +108,7 @@ async def test_create_currency_writes_audit_log(
 ) -> None:
     response = await async_client.post(
         "/api/v1/currencies",
-        json={"code": "USD", "name": "US Dollar", "decimal_places": 2},
+        json={"code": "GBP", "name": "British Pound", "decimal_places": 2},
     )
     assert response.status_code == 201
 
@@ -118,7 +118,7 @@ async def test_create_currency_writes_audit_log(
     assert logs[0].entity_type == "currency"
     assert logs[0].action == "create"
     assert logs[0].before_value is None
-    assert logs[0].after_value["code"] == "USD"
+    assert logs[0].after_value["code"] == "GBP"
 
 
 @pytest.mark.asyncio
@@ -128,11 +128,11 @@ async def test_create_exchange_rate_writes_audit_log(
 ) -> None:
     r_usd = await async_client.post(
         "/api/v1/currencies",
-        json={"code": "USD", "name": "US Dollar", "decimal_places": 2},
+        json={"code": "GBP", "name": "British Pound", "decimal_places": 2},
     )
     r_eur = await async_client.post(
         "/api/v1/currencies",
-        json={"code": "EUR", "name": "Euro", "decimal_places": 2},
+        json={"code": "CHF", "name": "Swiss Franc", "decimal_places": 2},
     )
     usd_id = r_usd.json()["id"]
     eur_id = r_eur.json()["id"]
