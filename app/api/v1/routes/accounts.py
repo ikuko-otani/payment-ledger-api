@@ -17,6 +17,10 @@ from app.repositories.account_repository import (
     get_account_repository,
 )
 from app.repositories.audit_repository import AuditRepository, get_audit_repository
+from app.repositories.currency_repository import (
+    CurrencyRepository,
+    get_currency_repository,
+)
 from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
 from app.services import account_service
 
@@ -24,6 +28,7 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 AccountRepoDep = Annotated[AccountRepository, Depends(get_account_repository)]
 AuditRepoDep = Annotated[AuditRepository, Depends(get_audit_repository)]
+CurrencyRepoDep = Annotated[CurrencyRepository, Depends(get_currency_repository)]
 
 
 @router.get("", response_model=list[AccountRead])
@@ -39,9 +44,12 @@ async def create_account(
     payload: AccountCreate,
     repo: AccountRepoDep,
     audit_repo: AuditRepoDep,
+    currency_repo: CurrencyRepoDep,
     current_user: AdminUser,
 ) -> Account:
-    return await account_service.create_account(repo, audit_repo, payload, current_user)
+    return await account_service.create_account(
+        repo, audit_repo, currency_repo, payload, current_user
+    )
 
 
 @router.get("/{id}/balance", response_model=BalanceResponse)
