@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException, status
@@ -41,7 +41,7 @@ class IdempotencyContext:
 
     def __init__(
         self,
-        replay: dict | None = None,
+        replay: dict[str, Any] | None = None,
         redis: aioredis.Redis | None = None,
         redis_key: str = "",
     ) -> None:
@@ -49,7 +49,7 @@ class IdempotencyContext:
         self._redis = redis
         self._redis_key = redis_key
 
-    async def cache(self, response_body: dict) -> None:
+    async def cache(self, response_body: dict[str, Any]) -> None:
         """Overwrite the __pending__ marker with the serialised response body."""
         if self._redis is not None and self._redis_key:
             await self._redis.set(
@@ -101,7 +101,7 @@ async def check_idempotency(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Duplicate request: Idempotency-Key already used",
-            )
+            ) from None
 
     # New request: key is now "__pending__"; wire up cache() for the route handler.
     ctx = IdempotencyContext(redis=redis, redis_key=redis_key)
