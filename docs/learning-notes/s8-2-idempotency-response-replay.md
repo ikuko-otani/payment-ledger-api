@@ -272,4 +272,47 @@ gh pr create \
 
 ## Key Takeaways
 
-*(added after goal completion — Step D)*
+### What did I learn?
+
+I learned the FastAPI generator dependency "sandwich" pattern in depth. A `yield`-based `Depends`
+splits into three phases: setup (before yield), the route body (during yield), and teardown
+(after yield). By yielding a mutable `IdempotencyContext` object instead of `None`, the
+dependency can communicate bidirectionally with the route handler — the handler reads
+`ctx.replay` to detect a cached hit, and calls `await ctx.cache(...)` to persist the response
+after success.
+
+I also learned that `model_dump(mode="json")` is required before `json.dumps()` when serialising
+a Pydantic model that contains non-JSON-serialisable types (UUID, datetime, date). The `mode="json"`
+flag coerces every field to a JSON-safe Python primitive, so `json.dumps()` needs no custom encoder.
+
+### What would I do differently?
+
+I would add `dict[str, Any]` type annotations from the start instead of writing bare `dict`.
+With `mypy --strict`, generic types always need type arguments, and it is faster to get this right
+in the first draft than to fix it after the lint step.
+
+### What surprised me?
+
+The `raise ... from None` requirement (ruff B904) surprised me. Even when the new exception
+(`HTTPException`) is completely unrelated to the caught one (`JSONDecodeError`), ruff requires
+an explicit `from` clause to make the intent clear. `from None` says "I am intentionally
+suppressing the original exception" — without it, the full `JSONDecodeError` traceback would be
+attached to the `HTTPException`, which leaks internal implementation details.
+
+### What is worth remembering for future goals?
+
+1. **`raise NewException(...) from None`** — use whenever raising a domain/HTTP exception
+   inside an `except` block where the original exception is an implementation detail.
+
+2. **`model_dump(mode="json")`** — always required before `json.dumps()` on a Pydantic model.
+   `model_dump()` alone returns Python objects (UUID, datetime); `mode="json"` converts them
+   to JSON-safe primitives.
+
+3. **`JSONResponse` bypasses `response_model`** — returning a `Response` subclass from a
+   FastAPI route skips serialisation and validation entirely. This is the correct pattern for
+   replaying a pre-serialised response, but it means the response is not validated against the
+   schema at runtime.
+
+4. **`SET NX` as an atomic gate** — a single `SET NX` Redis command is the correct primitive
+   for "exactly one winner" concurrency control. The same pattern applies to any resource
+   reservation problem (distributed locks, job claiming, etc.).
