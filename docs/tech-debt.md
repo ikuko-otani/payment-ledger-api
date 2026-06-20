@@ -7,8 +7,6 @@ Items are added when a task is completed and something is intentionally left out
 
 | ID | Sprint | Area | Description | Priority | Added |
 |----|--------|------|-------------|----------|-------|
-| TD-036 | S7-7 | cleanup | `app/services/balance.py` (`calculate_balance`) is no longer called from production code — `accounts.py` route now delegates to `AccountRepository.calculate_balance()`. The file is kept because `tests/test_balance.py` imports it directly. Fix: migrate `test_balance.py` to test via `SQLAlchemyAccountRepository.calculate_balance()` or the HTTP endpoint, then delete `balance.py`. | Low | S7-7 |
-| TD-037 | S7-8 | cleanup | `app/services/ledger_service.py` (`get_ledger_entries`) is no longer called from production code — `ledger.py` route now calls `LedgerRepository.list_entries()` directly after the S7-8 migration. The file is dead code (only referenced in learning notes). Fix: delete `ledger_service.py`. No test imports it, so no test migration is required. | Low | S7-8 |
 
 ## Resolved
 
@@ -49,6 +47,8 @@ Items are added when a task is completed and something is intentionally left out
 | TD-005 | Idempotency key stored in Redis but response body not cached. Fixed: `check_idempotency` caches response JSON via `IdempotencyContext.cache()` after route handler success. | S8-2 |
 | TD-013 | coverage.py under-reported async coverage (lines after `await` not recorded by `sys.settrace`). Fixed: `[tool.coverage.run] core = "sysmon"` added to `pyproject.toml`, enabling `sys.monitoring` backend (Python 3.12+) via coverage.py 7.14. | S8-3 |
 | TD-014 | `Makefile` not usable on Windows. Fixed: replaced with `poethepoet` tasks (`lint`/`format`/`typecheck`/`check`) in `[tool.poe.tasks]` in `pyproject.toml`; run via `uv run poe <task>`. `Makefile` deleted. | S8-3 |
+| TD-036 | `app/services/balance.py` (`calculate_balance`) was dead code after S7-8 repository layer migration. `tests/test_balance.py` migrated to use `SQLAlchemyAccountRepository.calculate_balance()`; `balance.py` deleted. | S8-4 |
+| TD-037 | `app/services/ledger_service.py` (`get_ledger_entries`) was dead code after S7-8 repository layer migration. No test imports; deleted directly. | S8-4 |
 
 ---
 
