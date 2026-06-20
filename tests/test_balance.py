@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account, AccountType
 from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction, TransactionStatus
-from app.services.balance import calculate_balance
+from app.repositories.account_repository import SQLAlchemyAccountRepository
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -90,8 +90,8 @@ async def test_balance_single_debit_equals_amount(db_session: AsyncSession) -> N
         db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 10)
     )
 
-    result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
+    result = await SQLAlchemyAccountRepository(db_session).calculate_balance(
+        cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 1000
 
@@ -110,8 +110,8 @@ async def test_balance_excludes_transaction_after_as_of(
         db_session, cash, revenue, amount=500, transaction_date=date(2026, 2, 1)
     )
 
-    result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
+    result = await SQLAlchemyAccountRepository(db_session).calculate_balance(
+        cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 1000  # assert only the first tx is reflected (second is excluded)
 
@@ -155,8 +155,8 @@ async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> 
     )
     await db_session.commit()
 
-    result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
+    result = await SQLAlchemyAccountRepository(db_session).calculate_balance(
+        cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert (
         result == 1000
@@ -168,8 +168,8 @@ async def test_balance_no_transactions_returns_zero(db_session: AsyncSession) ->
     # Create an account with no transactions
     cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
 
-    result = await calculate_balance(
-        db_session, cash.id, datetime(2026, 1, 31, tzinfo=UTC)
+    result = await SQLAlchemyAccountRepository(db_session).calculate_balance(
+        cash.id, datetime(2026, 1, 31, tzinfo=UTC)
     )
     assert result == 0
 
