@@ -625,3 +625,153 @@ async def test_non_usd_transaction_resolves_conversion_rate_once(
     assert len(conversion_queries) <= 3
 
     assert all(e.converted_amount_usd == 550 for e in tx.entries)
+
+
+@pytest.mark.asyncio
+async def test_weekend_date_uses_most_recent_exchange_rate(
+    db_session: AsyncSession,
+) -> None:
+    """TD-039: transaction on Saturday uses Friday's exchange rate."""
+    result = await db_session.execute(
+        select(Currency).where(Currency.code.in_(["EUR", "USD"]))
+    )
+    currencies = {c.code: c for c in result.scalars().all()}
+    eur = currencies["EUR"]
+    usd = currencies["USD"]
+
+    test_user_id = uuid.uuid4()
+    db_session.add(
+        User(
+            id=test_user_id,
+            email="fx-weekend@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+    )
+    await db_session.flush()
+
+    # Register rate on Friday 2026-07-03
+    db_session.add(
+        ExchangeRate(
+            from_currency_id=eur.id,
+            to_currency_id=usd.id,
+            rate=Decimal("1.08"),
+            effective_date=date(2026, 7, 3),
+            created_by_id=test_user_id,
+        )
+    )
+    await db_session.commit()
+
+    debit = await _create_account(
+        db_session, "Cash-FX-WE", AccountType.ASSET, code="1160"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-FX-WE", AccountType.REVENUE, code="4060"
+    )
+
+    # Transaction on Saturday 2026-07-04 — should fall back to Friday's rate
+    payload = TransactionCreate(
+        currency_code="EUR",
+        description="Weekend fallback",
+        transaction_date=date(2026, 7, 4),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=1000,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=1000,
+                currency="EUR",
+            ),
+        ],
+    )
+
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    tx = await create_transaction(
+        account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=test_user_id
+    )
+
+    # 1000 EUR * 1.08 = 1080 USD cents
+    assert all(e.converted_amount_usd == 1080 for e in tx.entries)
+
+
+@pytest.mark.asyncio
+async def test_no_exchange_rate_on_or_before_date_returns_422(
+    db_session: AsyncSession,
+) -> None:
+    """TD-039: transaction before any available rate returns 422."""
+    result = await db_session.execute(
+        select(Currency).where(Currency.code.in_(["EUR", "USD"]))
+    )
+    currencies = {c.code: c for c in result.scalars().all()}
+    eur = currencies["EUR"]
+    usd = currencies["USD"]
+
+    test_user_id = uuid.uuid4()
+    db_session.add(
+        User(
+            id=test_user_id,
+            email="fx-norate@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+    )
+    await db_session.flush()
+
+    # Register rate on 2026-07-03
+    db_session.add(
+        ExchangeRate(
+            from_currency_id=eur.id,
+            to_currency_id=usd.id,
+            rate=Decimal("1.08"),
+            effective_date=date(2026, 7, 3),
+            created_by_id=test_user_id,
+        )
+    )
+    await db_session.commit()
+
+    debit = await _create_account(
+        db_session, "Cash-FX-NR", AccountType.ASSET, code="1170"
+    )
+    credit = await _create_account(
+        db_session, "Revenue-FX-NR", AccountType.REVENUE, code="4070"
+    )
+
+    # Transaction on 2026-07-01 — before any rate exists → 422
+    payload = TransactionCreate(
+        currency_code="EUR",
+        description="No rate before date",
+        transaction_date=date(2026, 7, 1),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=1000,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=1000,
+                currency="EUR",
+            ),
+        ],
+    )
+
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    with pytest.raises(ValidationError) as exc_info:
+        await create_transaction(
+            account_repo,
+            currency_repo,
+            tx_repo,
+            audit_repo,
+            payload,
+            user_id=test_user_id,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "on or before" in str(exc_info.value.detail).lower()
