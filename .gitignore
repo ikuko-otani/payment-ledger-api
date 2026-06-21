@@ -6,6 +6,9 @@ __pycache__/
 # Personal goal template (not version-controlled)
 flagship-goal-prompt-template.md
 
+# Claude Code working rules (local-only, not published)
+CLAUDE.md
+
 # Claude Code local settings (not version-controlled)
 .claude/
 
