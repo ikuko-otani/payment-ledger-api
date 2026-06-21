@@ -7,6 +7,9 @@ Items are added when a task is completed and something is intentionally left out
 
 | ID | Sprint | Area | Description | Priority | Added |
 |----|--------|------|-------------|----------|-------|
+| TD-044 | S8 | Code | `alembic/env.py:9` still has Japanese comment (`# ← これがないと .env が読まれない`). Residual from TD-043 sweep which only covered `app/db/session.py` and `tests/conftest.py`. | Low | 2026-06-21 |
+| TD-045 | S8 | Test | No concurrent in-flight 409 test for idempotency `pending` state. The code path (`idempotency.py:120-123`) is correct but untested — two simultaneous requests with the same key should yield one 201 and one 409. Identified in first pre-publication review as Gap #1. | Medium | 2026-06-21 |
+| TD-046 | S8 | Perf | `GET /accounts/{id}/balance` cache-hit path re-introduces a DB query. TD-038 fix added `find_by_id` PK lookup (for currency + 404) on every request including cache hits, partially regressing TD-015's zero-DB-query hot path (~37ms). Storing currency alongside balance in the cache value would restore DB-free cache hits. | Low | 2026-06-21 |
 
 ## Resolved
 
