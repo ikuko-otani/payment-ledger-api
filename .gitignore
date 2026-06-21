@@ -26,3 +26,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Personal learning notes (local-only, not published)
+docs/learning-notes/
