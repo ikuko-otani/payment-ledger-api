@@ -22,6 +22,9 @@ class AccountRepository(ABC):
     async def save(self, account: Account) -> Account: ...
 
     @abstractmethod
+    async def find_by_id(self, account_id: uuid.UUID) -> Account | None: ...
+
+    @abstractmethod
     async def list_all(self) -> list[Account]: ...
 
     @abstractmethod
@@ -42,6 +45,9 @@ class SQLAlchemyAccountRepository(AccountRepository):
         await self._db.flush()
         await self._db.refresh(account)
         return account
+
+    async def find_by_id(self, account_id: uuid.UUID) -> Account | None:
+        return await self._db.get(Account, account_id)
 
     async def list_all(self) -> list[Account]:
         result = await self._db.execute(select(Account).order_by(Account.code))
