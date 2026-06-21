@@ -46,4 +46,5 @@ class AccountRead(BaseModel):
 
 class BalanceResponse(BaseModel):
     balance: int  # BIGINT minor units e.g. 1000 = €10.00; changed from Decimal
+    currency: str  # ISO 4217 code e.g. "EUR"
     as_of: datetime
