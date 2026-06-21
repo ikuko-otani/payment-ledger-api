@@ -239,3 +239,4 @@ async def test_get_balance_endpoint_returns_correct_value(
     )
     assert resp.status_code == 200
     assert resp.json()["balance"] == 2500
+    assert resp.json()["currency"] == "EUR"

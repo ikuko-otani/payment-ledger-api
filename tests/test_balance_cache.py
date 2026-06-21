@@ -101,6 +101,7 @@ async def test_balance_cache_miss_stores_value_in_redis(
     )
     assert resp.status_code == 200
     assert resp.json()["balance"] == 1000
+    assert resp.json()["currency"] == "EUR"
 
     cached = await redis_client.get(f"balance:{cash_id}:2026-01-31")
     assert cached == "1000"
@@ -131,6 +132,7 @@ async def test_balance_cache_hit_returns_cached_value(
     )
     assert resp.status_code == 200
     assert resp.json()["balance"] == 9999
+    assert resp.json()["currency"] == "EUR"
 
 
 @pytest.mark.asyncio
