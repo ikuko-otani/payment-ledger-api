@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.config import settings
 from app.core.deps import AdminUser, AuditorOrAdminUser
@@ -60,10 +60,15 @@ async def get_account_balance(
     redis: RedisDep,
     _current_user: AuditorOrAdminUser,
 ) -> BalanceResponse:
+    account = await repo.find_by_id(id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
     cache_key = f"balance:{id}:{as_of.date()}"
     cached = await redis.get(cache_key)
     if cached is not None:
-        return BalanceResponse(balance=int(cached), as_of=as_of)
+        return BalanceResponse(
+            balance=int(cached), currency=account.currency, as_of=as_of
+        )
     balance = await repo.calculate_balance(id, as_of)
     await redis.set(cache_key, str(balance), ex=settings.balance_cache_ttl_seconds)
-    return BalanceResponse(balance=balance, as_of=as_of)
+    return BalanceResponse(balance=balance, currency=account.currency, as_of=as_of)
