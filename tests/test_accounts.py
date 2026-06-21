@@ -157,3 +157,40 @@ async def test_create_account_unknown_currency_returns_422(
     )
     assert resp.status_code == 422
     assert "XYZ" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_list_accounts_respects_limit_and_offset(
+    async_client: AsyncClient,
+) -> None:
+    """GET /accounts with limit/offset returns the correct page."""
+    for code, name in [
+        ("1000", "Acct-A"),
+        ("2000", "Acct-B"),
+        ("3000", "Acct-C"),
+    ]:
+        resp = await async_client.post(
+            "/api/v1/accounts",
+            json={
+                "code": code,
+                "name": name,
+                "account_type": "asset",
+                "currency": "EUR",
+            },
+        )
+        assert resp.status_code == 201
+
+    # limit=2 → first 2 rows (ordered by code)
+    resp = await async_client.get("/api/v1/accounts", params={"limit": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0]["code"] == "1000"
+    assert data[1]["code"] == "2000"
+
+    # offset=2 → skip first 2, get the third
+    resp = await async_client.get("/api/v1/accounts", params={"limit": 10, "offset": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["code"] == "3000"
