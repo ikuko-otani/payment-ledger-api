@@ -76,7 +76,7 @@ async def get_account_balance(
     balance = await repo.calculate_balance(id, as_of)
     await redis.set(
         cache_key,
-        json.dumps({"balance": balance, "currency": account.currency}),
+        json.dumps({"balance": int(balance), "currency": account.currency}),
         ex=settings.balance_cache_ttl_seconds,
     )
     return BalanceResponse(balance=balance, currency=account.currency, as_of=as_of)
