@@ -71,9 +71,12 @@ async def post_transaction(
     await db.commit()
     for entry in payload.entries:
         pattern = f"balance:{entry.account_id}:*"
-        keys = await redis.keys(pattern)
-        if keys:
-            await redis.delete(*keys)
+        keys_to_delete: list[str] = []
+        # count=100: keyspace is small (hundreds~thousands); 1-2 round trips suffice
+        async for key in redis.scan_iter(match=pattern, count=100):
+            keys_to_delete.append(key)
+        if keys_to_delete:
+            await redis.delete(*keys_to_delete)
 
     response_data = TransactionRead.model_validate(transaction).model_dump(mode="json")
     await idempotency.cache(response_data)
