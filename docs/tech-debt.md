@@ -7,8 +7,6 @@ Items are added when a task is completed and something is intentionally left out
 
 | ID | Sprint | Area | Description | Priority | Added |
 |----|--------|------|-------------|----------|-------|
-| TD-039 | S8 | FX | `find_exchange_rate` uses exact date match (`effective_date == transaction_date`); holidays/weekends with no rate row return 422 instead of using most recent available rate | Medium | post-S8-4 review |
-| TD-043 | S8 | Code quality | Japanese comments in core files (`app/db/session.py`, `tests/conftest.py`); inconsistent with English-only code convention | Low | post-S8-4 review |
 
 ## Resolved
 
@@ -55,6 +53,8 @@ Items are added when a task is completed and something is intentionally left out
 | TD-040 | `/accounts`, `/currencies`, `/exchange-rates` returned unbounded result sets (no `limit`/`offset`). Fixed: added `limit` (default 20, ge=1, le=100) and `offset` (default 0, ge=0) query parameters, consistent with `/transactions`, `/ledger`, `/audit-logs`. Repository `list_all` / `list_exchange_rates` now accept `limit`/`offset` and apply `.limit().offset()`. | S8-5 |
 | TD-041 | Idempotency key not bound to request body; same key with different body silently replayed original response. Fixed: SHA-256 fingerprint of the request body is stored alongside the idempotency key in Redis; on replay, fingerprint is compared and mismatches return 422. | S8-6 |
 | TD-042 | `POST /transactions` used `redis.keys("balance:{id}:*")` (O(N) full keyspace scan) for cache invalidation. Fixed: replaced with `redis.scan_iter(match=pattern)` which uses cursor-based SCAN (O(1) per call, non-blocking). | S8-6 |
+| TD-039 | `find_exchange_rate` used exact date match (`effective_date == transaction_date`); holidays/weekends with no rate row returned 422 instead of using most recent available rate. Fixed: changed to `effective_date <= transaction_date ORDER BY effective_date DESC LIMIT 1`. | S8-7 |
+| TD-043 | Japanese comments in core files (`app/db/session.py`, `tests/conftest.py`). Fixed: translated to English for consistency with the codebase English-only convention. | S8-7 |
 
 ---
 
