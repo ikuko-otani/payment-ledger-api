@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pytest
 import pytest_asyncio
 import redis.asyncio as aioredis
@@ -104,7 +105,9 @@ async def test_balance_cache_miss_stores_value_in_redis(
     assert resp.json()["currency"] == "EUR"
 
     cached = await redis_client.get(f"balance:{cash_id}:2026-01-31")
-    assert cached == "1000"
+    assert cached is not None
+    data = json.loads(cached)
+    assert data == {"balance": 1000, "currency": "EUR"}
 
 
 @pytest.mark.asyncio
@@ -124,7 +127,11 @@ async def test_balance_cache_hit_returns_cached_value(
     assert resp.status_code == 201
     cash_id = resp.json()["id"]
 
-    await redis_client.set(f"balance:{cash_id}:2026-01-31", "9999", ex=60)
+    await redis_client.set(
+        f"balance:{cash_id}:2026-01-31",
+        json.dumps({"balance": 9999, "currency": "EUR"}),
+        ex=60,
+    )
 
     resp = await cached_client.get(
         f"/api/v1/accounts/{cash_id}/balance",
@@ -133,6 +140,33 @@ async def test_balance_cache_hit_returns_cached_value(
     assert resp.status_code == 200
     assert resp.json()["balance"] == 9999
     assert resp.json()["currency"] == "EUR"
+
+
+@pytest.mark.asyncio
+async def test_balance_cache_hit_does_not_query_db(
+    cached_client: AsyncClient,
+    redis_client: aioredis.Redis,  # type: ignore[type-arg]
+) -> None:
+    """Cache hit returns the cached value without any DB lookup.
+
+    The account does not exist in the database — if the route tried
+    find_by_id it would get None and return 404.  A 200 proves the
+    cache-hit path is entirely DB-free.
+    """
+    fake_id = "00000000-0000-4000-a000-000000000099"
+    await redis_client.set(
+        f"balance:{fake_id}:2026-01-31",
+        json.dumps({"balance": 5000, "currency": "JPY"}),
+        ex=60,
+    )
+
+    resp = await cached_client.get(
+        f"/api/v1/accounts/{fake_id}/balance",
+        params={"as_of": "2026-01-31T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["balance"] == 5000
+    assert resp.json()["currency"] == "JPY"
 
 
 @pytest.mark.asyncio
