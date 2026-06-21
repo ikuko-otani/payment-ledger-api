@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — implemented in Sprint S2-X-1
+Accepted
 
 ## Context
 

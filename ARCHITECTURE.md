@@ -525,8 +525,7 @@ and binds it into every structlog entry via `structlog.contextvars`.
   misconfigure. The most subtle failure mode encountered was instrumenting
   OTel at the wrong point in the FastAPI lifespan, which silently produced
   `trace_id = "00000000000000000000000000000000"` (32 zeros — OTel's
-  `INVALID_SPAN` sentinel) instead of raising an error (see
-  `docs/learning-notes/s5-3-otel-fastapi-instrumentation.md`). The fix was to
+  `INVALID_SPAN` sentinel) instead of raising an error. The fix was to
   call `instrument_app(app)` before the app starts serving requests, not
   inside the lifespan callback.
 - *No metrics pillar yet*: latency percentiles and error-rate alerting
@@ -541,7 +540,7 @@ and binds it into every structlog entry via `structlog.contextvars`.
 (`balance:{account_id}:{as_of_date}`); on a miss it computes the balance from
 PostgreSQL and writes it back to Redis with a TTL; on every transaction write,
 the service explicitly deletes the cache keys for every account touched by
-that transaction (see `app/services/balance.py`, `app/core/redis.py`,
+that transaction (see `app/repositories/account_repository.py`, `app/core/redis.py`,
 `tests/test_balance_cache.py`).
 
 **What was rejected / considered**:

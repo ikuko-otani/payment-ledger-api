@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — implemented in Sprint S2-3 (`feature/s2-3-redis-idempotency-key`)
+Accepted
 
 ## Context
 
@@ -45,7 +45,7 @@ Stripe's API returns `200 OK` with the **original response body** on a duplicate
 
 The Stripe-style behaviour requires caching the serialised response alongside the key,
 which adds complexity. This is tracked as **TD-004 / TD-005** in `docs/tech-debt.md`
-and is deferred to a later Sprint.
+and is deferred to a future iteration.
 
 ## Consequences
 

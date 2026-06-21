@@ -1,4 +1,5 @@
-.env
+.env*
+!.env.example
 __pycache__/
 *.py[cod]
 .venv/
@@ -18,9 +19,16 @@ CLAUDE.md
 coverage.xml
 htmlcov/
 
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+
 # IDE directories
 .idea/
 .vscode/
+
+# OS files
+.DS_Store
 
 # Build / packaging
 dist/
@@ -29,3 +37,6 @@ build/
 
 # Personal learning notes (local-only, not published)
 docs/learning-notes/
+
+# Internal review notes (local-only, not published)
+docs/reviews/

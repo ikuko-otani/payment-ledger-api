@@ -1,7 +1,6 @@
 # ADR-006 — Embed role/is_active in JWT payload; eliminate per-request DB lookup
 
 **Date**: 2026-06-16
-**Sprint**: S7-5
 **Status**: Accepted
 
 ## Context

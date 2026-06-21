@@ -9,8 +9,7 @@ Two task types simulate the read/write mix of a ledger system:
     double-entry transaction between two existing accounts.
   - GET /api/v1/accounts/{id}/balance  (weight 3) -- read account balance.
 
-Setup required before running against real data (see
-docs/learning-notes/s6-7-locust-docker-compose.md):
+Setup required before running against real data:
   - An ADMIN-role user must exist (LOCUST_ADMIN_EMAIL / LOCUST_ADMIN_PASSWORD).
   - At least 2 accounts must exist (created via POST /accounts as that admin).
 """
