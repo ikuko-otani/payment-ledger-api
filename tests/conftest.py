@@ -197,7 +197,8 @@ async def async_client(
                 await session.rollback()
                 raise
 
-    # get_current_user を常に固定ユーザーで返す mock（DB に seed した ID と一致させる）
+    # Override get_current_user to always return a fixed admin user
+    # whose ID matches the seeded _FIXTURE_ADMIN_ID row.
     async def override_get_current_user() -> User:
         return User(
             id=_FIXTURE_ADMIN_ID,
@@ -244,7 +245,7 @@ async def unauthed_client(
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
     fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
-    # get_current_user は override しない → 実際の JWT 検証が走る
+    # Do not override get_current_user — real JWT validation runs
 
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
