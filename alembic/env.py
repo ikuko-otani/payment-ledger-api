@@ -6,7 +6,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-load_dotenv()  # ← これがないと .env が読まれない
+load_dotenv()  # must run before Alembic reads config; otherwise .env is not loaded
 
 # 📋 Alembic Config object
 config = context.config
