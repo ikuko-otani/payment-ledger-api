@@ -7,9 +7,7 @@ Items are added when a task is completed and something is intentionally left out
 
 | ID | Sprint | Area | Description | Priority | Added |
 |----|--------|------|-------------|----------|-------|
-| TD-038 | S8 | API | `BalanceResponse` returns `balance: int` without currency code — caller cannot determine if 1000 means €10.00 or ¥1000 | High | post-S8-4 review |
 | TD-039 | S8 | FX | `find_exchange_rate` uses exact date match (`effective_date == transaction_date`); holidays/weekends with no rate row return 422 instead of using most recent available rate | Medium | post-S8-4 review |
-| TD-040 | S8 | API | `/accounts`, `/currencies`, `/exchange-rates` return unbounded result sets (no `limit`/`offset`); `/exchange-rates` grows daily | Medium | post-S8-4 review |
 | TD-041 | S8 | Idempotency | Idempotency key not bound to request body; same key with different body silently replays original response, dropping the new request | High | post-S8-4 review |
 | TD-042 | S8 | Redis | `POST /transactions` uses `redis.keys("balance:{id}:*")` (O(N) full keyspace scan) for cache invalidation | Medium | post-S8-4 review |
 | TD-043 | S8 | Code quality | Japanese comments in core files (`app/db/session.py`, `tests/conftest.py`); inconsistent with English-only code convention | Low | post-S8-4 review |
@@ -55,6 +53,8 @@ Items are added when a task is completed and something is intentionally left out
 | TD-014 | `Makefile` not usable on Windows. Fixed: replaced with `poethepoet` tasks (`lint`/`format`/`typecheck`/`check`) in `[tool.poe.tasks]` in `pyproject.toml`; run via `uv run poe <task>`. `Makefile` deleted. | S8-3 |
 | TD-036 | `app/services/balance.py` (`calculate_balance`) was dead code after S7-8 repository layer migration. `tests/test_balance.py` migrated to use `SQLAlchemyAccountRepository.calculate_balance()`; `balance.py` deleted. | S8-4 |
 | TD-037 | `app/services/ledger_service.py` (`get_ledger_entries`) was dead code after S7-8 repository layer migration. No test imports; deleted directly. | S8-4 |
+| TD-038 | `BalanceResponse` returned `balance: int` without currency code — caller could not determine if 1000 meant €10.00 or ¥1000. Fixed: added `currency: str` (ISO 4217) field; `GET /accounts/{id}/balance` now fetches the account's currency via `find_by_id` PK lookup (also adds 404 for non-existent accounts). | S8-5 |
+| TD-040 | `/accounts`, `/currencies`, `/exchange-rates` returned unbounded result sets (no `limit`/`offset`). Fixed: added `limit` (default 20, ge=1, le=100) and `offset` (default 0, ge=0) query parameters, consistent with `/transactions`, `/ledger`, `/audit-logs`. Repository `list_all` / `list_exchange_rates` now accept `limit`/`offset` and apply `.limit().offset()`. | S8-5 |
 
 ---
 

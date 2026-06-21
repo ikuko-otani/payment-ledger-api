@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import AdminUser, CurrentUser
 from app.models.currency import Currency
@@ -24,9 +24,12 @@ AuditRepoDep = Annotated[AuditRepository, Depends(get_audit_repository)]
 
 @router.get("", response_model=list[CurrencyRead])
 async def list_currencies(
-    repo: CurrencyRepoDep, _current_user: CurrentUser
+    repo: CurrencyRepoDep,
+    _current_user: CurrentUser,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> list[Currency]:
-    return await get_currencies(repo)
+    return await get_currencies(repo, limit=limit, offset=offset)
 
 
 @router.post("", response_model=CurrencyRead, status_code=201)

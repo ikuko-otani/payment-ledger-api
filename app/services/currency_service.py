@@ -14,8 +14,10 @@ from app.schemas.currency import CurrencyCreate, ExchangeRateCreate
 from app.schemas.token import TokenUser
 
 
-async def get_currencies(repo: CurrencyRepository) -> list[Currency]:
-    return await repo.list_all()
+async def get_currencies(
+    repo: CurrencyRepository, limit: int = 20, offset: int = 0
+) -> list[Currency]:
+    return await repo.list_all(limit=limit, offset=offset)
 
 
 async def create_currency(
@@ -53,9 +55,15 @@ async def get_exchange_rates(
     from_currency_id: uuid.UUID | None = None,
     to_currency_id: uuid.UUID | None = None,
     effective_date: date | None = None,
+    limit: int = 20,
+    offset: int = 0,
 ) -> list[ExchangeRate]:
     return await repo.list_exchange_rates(
-        from_currency_id, to_currency_id, effective_date
+        from_currency_id,
+        to_currency_id,
+        effective_date,
+        limit=limit,
+        offset=offset,
     )
 
 

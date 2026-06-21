@@ -19,7 +19,7 @@ from app.models.exchange_rate import ExchangeRate
 
 class CurrencyRepository(ABC):
     @abstractmethod
-    async def list_all(self) -> list[Currency]: ...
+    async def list_all(self, limit: int = 20, offset: int = 0) -> list[Currency]: ...
 
     @abstractmethod
     async def save(self, currency: Currency) -> Currency: ...
@@ -33,6 +33,8 @@ class CurrencyRepository(ABC):
         from_currency_id: uuid.UUID | None,
         to_currency_id: uuid.UUID | None,
         effective_date: date | None,
+        limit: int = 20,
+        offset: int = 0,
     ) -> list[ExchangeRate]: ...
 
     @abstractmethod
@@ -51,8 +53,10 @@ class SQLAlchemyCurrencyRepository(CurrencyRepository):
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def list_all(self) -> list[Currency]:
-        result = await self._db.execute(select(Currency).order_by(Currency.code))
+    async def list_all(self, limit: int = 20, offset: int = 0) -> list[Currency]:
+        result = await self._db.execute(
+            select(Currency).order_by(Currency.code).limit(limit).offset(offset)
+        )
         return list(result.scalars().all())
 
     async def save(self, currency: Currency) -> Currency:
@@ -70,6 +74,8 @@ class SQLAlchemyCurrencyRepository(CurrencyRepository):
         from_currency_id: uuid.UUID | None,
         to_currency_id: uuid.UUID | None,
         effective_date: date | None,
+        limit: int = 20,
+        offset: int = 0,
     ) -> list[ExchangeRate]:
         stmt = select(ExchangeRate)
         if from_currency_id is not None:
@@ -79,6 +85,7 @@ class SQLAlchemyCurrencyRepository(CurrencyRepository):
         if effective_date is not None:
             stmt = stmt.where(ExchangeRate.effective_date == effective_date)
         stmt = stmt.order_by(ExchangeRate.effective_date.desc(), ExchangeRate.id)
+        stmt = stmt.limit(limit).offset(offset)
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 

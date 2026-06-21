@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import AdminUser, CurrentUser
 from app.models.exchange_rate import ExchangeRate
@@ -31,9 +31,16 @@ async def list_exchange_rates(
     from_currency_id: uuid.UUID | None = None,
     to_currency_id: uuid.UUID | None = None,
     effective_date: date | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> list[ExchangeRate]:
     return await get_exchange_rates(
-        repo, from_currency_id, to_currency_id, effective_date
+        repo,
+        from_currency_id,
+        to_currency_id,
+        effective_date,
+        limit=limit,
+        offset=offset,
     )
 
 

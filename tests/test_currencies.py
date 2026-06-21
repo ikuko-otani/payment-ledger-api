@@ -154,3 +154,67 @@ async def test_post_duplicate_exchange_rate_returns_409(
 
     r2 = await client.post("/api/v1/exchange-rates", json=payload)
     assert r2.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# S8-5: pagination tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_currencies_respects_limit_and_offset(
+    async_client: AsyncClient,
+) -> None:
+    """GET /currencies with limit/offset returns the correct page."""
+    # conftest seeds USD, EUR, JPY (3 currencies, ordered by code: EUR, JPY, USD)
+    resp = await async_client.get("/api/v1/currencies", params={"limit": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0]["code"] == "EUR"
+    assert data[1]["code"] == "JPY"
+
+    resp = await async_client.get(
+        "/api/v1/currencies", params={"limit": 10, "offset": 2}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["code"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_list_exchange_rates_respects_limit_and_offset(
+    async_client: AsyncClient,
+) -> None:
+    """GET /exchange-rates with limit/offset returns the correct page."""
+    r_gbp = await async_client.post("/api/v1/currencies", json=_CURRENCY_GBP)
+    r_chf = await async_client.post("/api/v1/currencies", json=_CURRENCY_CHF)
+    gbp_id = r_gbp.json()["id"]
+    chf_id = r_chf.json()["id"]
+
+    for d in ["2024-01-01", "2024-02-01", "2024-03-01"]:
+        await async_client.post(
+            "/api/v1/exchange-rates",
+            json={
+                "from_currency_id": gbp_id,
+                "to_currency_id": chf_id,
+                "rate": "1.15000000",
+                "effective_date": d,
+            },
+        )
+
+    # order_by effective_date DESC → 2024-03-01, 2024-02-01, 2024-01-01
+    resp = await async_client.get("/api/v1/exchange-rates", params={"limit": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0]["effective_date"] == "2024-03-01"
+
+    resp = await async_client.get(
+        "/api/v1/exchange-rates", params={"limit": 10, "offset": 2}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["effective_date"] == "2024-01-01"
