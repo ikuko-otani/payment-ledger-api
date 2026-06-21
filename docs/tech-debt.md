@@ -7,6 +7,12 @@ Items are added when a task is completed and something is intentionally left out
 
 | ID | Sprint | Area | Description | Priority | Added |
 |----|--------|------|-------------|----------|-------|
+| TD-038 | S8 | API | `BalanceResponse` returns `balance: int` without currency code — caller cannot determine if 1000 means €10.00 or ¥1000 | High | post-S8-4 review |
+| TD-039 | S8 | FX | `find_exchange_rate` uses exact date match (`effective_date == transaction_date`); holidays/weekends with no rate row return 422 instead of using most recent available rate | Medium | post-S8-4 review |
+| TD-040 | S8 | API | `/accounts`, `/currencies`, `/exchange-rates` return unbounded result sets (no `limit`/`offset`); `/exchange-rates` grows daily | Medium | post-S8-4 review |
+| TD-041 | S8 | Idempotency | Idempotency key not bound to request body; same key with different body silently replays original response, dropping the new request | High | post-S8-4 review |
+| TD-042 | S8 | Redis | `POST /transactions` uses `redis.keys("balance:{id}:*")` (O(N) full keyspace scan) for cache invalidation | Medium | post-S8-4 review |
+| TD-043 | S8 | Code quality | Japanese comments in core files (`app/db/session.py`, `tests/conftest.py`); inconsistent with English-only code convention | Low | post-S8-4 review |
 
 ## Resolved
 
