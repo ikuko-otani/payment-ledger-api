@@ -25,7 +25,7 @@ class AccountRepository(ABC):
     async def find_by_id(self, account_id: uuid.UUID) -> Account | None: ...
 
     @abstractmethod
-    async def list_all(self) -> list[Account]: ...
+    async def list_all(self, limit: int = 20, offset: int = 0) -> list[Account]: ...
 
     @abstractmethod
     async def find_active_by_ids(self, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]: ...
@@ -49,8 +49,10 @@ class SQLAlchemyAccountRepository(AccountRepository):
     async def find_by_id(self, account_id: uuid.UUID) -> Account | None:
         return await self._db.get(Account, account_id)
 
-    async def list_all(self) -> list[Account]:
-        result = await self._db.execute(select(Account).order_by(Account.code))
+    async def list_all(self, limit: int = 20, offset: int = 0) -> list[Account]:
+        result = await self._db.execute(
+            select(Account).order_by(Account.code).limit(limit).offset(offset)
+        )
         return list(result.scalars().all())
 
     async def find_active_by_ids(self, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
