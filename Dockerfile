@@ -9,6 +9,6 @@ RUN uv sync --no-dev --frozen
 
 COPY . .
 
-# production-equivalent default — multi-worker, no auto-reload.
+# --no-sync: deps already installed by `uv sync` above; skip re-sync at startup.
 # Local development overrides this via compose.yaml's `command:` (fastapi dev).
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
