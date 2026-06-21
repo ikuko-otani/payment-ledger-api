@@ -107,11 +107,14 @@ class SQLAlchemyCurrencyRepository(CurrencyRepository):
         effective_date: date,
     ) -> ExchangeRate | None:
         result = await self._db.execute(
-            select(ExchangeRate).where(
+            select(ExchangeRate)
+            .where(
                 ExchangeRate.from_currency_id == from_currency_id,
                 ExchangeRate.to_currency_id == to_currency_id,
-                ExchangeRate.effective_date == effective_date,
+                ExchangeRate.effective_date <= effective_date,
             )
+            .order_by(ExchangeRate.effective_date.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

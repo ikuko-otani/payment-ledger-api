@@ -63,7 +63,8 @@ async def _resolve_usd_conversion_rate(
     if exchange_rate is None:
         raise ValidationError(
             detail=(
-                f"No exchange rate found for {currency_code}→{BASE_CURRENCY} on {transaction_date}"
+                f"No exchange rate found for {currency_code}→{BASE_CURRENCY} "
+                f"on or before {transaction_date}"
             )
         )
 
