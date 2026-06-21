@@ -295,3 +295,70 @@ async def test_no_idempotency_key_header_succeeds(
     }
     r = await idempotent_client.post("/api/v1/transactions", json=payload)
     assert r.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_same_key_different_body_returns_422(
+    idempotent_client: AsyncClient,
+    db_session,
+) -> None:
+    """Same idempotency key with a different request body must return 422 (TD-041)."""
+    from tests.test_transactions import _create_account as create_account
+
+    acc_debit = await create_account(
+        db_session, name="Cash6", account_type=AccountType.ASSET, code="1105"
+    )
+    acc_credit = await create_account(
+        db_session, name="Revenue6", account_type=AccountType.REVENUE, code="4005"
+    )
+
+    key = str(uuid.uuid4())
+    headers = {"Idempotency-Key": key}
+
+    payload_1 = {
+        "description": "First payload",
+        "transaction_date": "2024-06-01",
+        "entries": [
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 100,
+                "currency": "EUR",
+            },
+            {
+                "account_id": str(acc_credit.id),
+                "direction": "credit",
+                "amount": 100,
+                "currency": "EUR",
+            },
+        ],
+    }
+    payload_2 = {
+        "description": "Different payload",
+        "transaction_date": "2024-06-01",
+        "entries": [
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 200,
+                "currency": "EUR",
+            },
+            {
+                "account_id": str(acc_credit.id),
+                "direction": "credit",
+                "amount": 200,
+                "currency": "EUR",
+            },
+        ],
+    }
+
+    r1 = await idempotent_client.post(
+        "/api/v1/transactions", json=payload_1, headers=headers
+    )
+    assert r1.status_code == 201
+
+    r2 = await idempotent_client.post(
+        "/api/v1/transactions", json=payload_2, headers=headers
+    )
+    assert r2.status_code == 422
+    assert "different request body" in r2.json()["detail"]
