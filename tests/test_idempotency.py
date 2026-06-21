@@ -362,3 +362,55 @@ async def test_same_key_different_body_returns_422(
     )
     assert r2.status_code == 422
     assert "different request body" in r2.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_inflight_idempotency_returns_409(
+    idempotent_client: AsyncClient,
+    db_session,
+) -> None:
+    """TD-045: two concurrent requests with the same idempotency key —
+    the second hits the 'pending' branch (no cached response yet) and
+    receives 409.
+    """
+    import asyncio
+
+    from tests.test_transactions import _create_account as create_account
+
+    acc_debit = await create_account(
+        db_session, name="Cash7", account_type=AccountType.ASSET, code="1106"
+    )
+    acc_credit = await create_account(
+        db_session, name="Revenue7", account_type=AccountType.REVENUE, code="4006"
+    )
+
+    shared_key = str(uuid.uuid4())
+    payload = {
+        "description": "Concurrent inflight test",
+        "transaction_date": "2024-06-01",
+        "entries": [
+            {
+                "account_id": str(acc_debit.id),
+                "direction": "debit",
+                "amount": 300,
+                "currency": "EUR",
+            },
+            {
+                "account_id": str(acc_credit.id),
+                "direction": "credit",
+                "amount": 300,
+                "currency": "EUR",
+            },
+        ],
+    }
+    headers = {"Idempotency-Key": shared_key}
+
+    async def _post() -> int:
+        r = await idempotent_client.post(
+            "/api/v1/transactions", json=payload, headers=headers
+        )
+        return r.status_code
+
+    status_codes = sorted(await asyncio.gather(_post(), _post()))
+
+    assert status_codes == [201, 409], f"Expected [201, 409], got {status_codes}"
