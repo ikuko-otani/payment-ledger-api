@@ -8,7 +8,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-
 from app.core.deps import AdminUser, CurrentUser
 from app.models.exchange_rate import ExchangeRate
 from app.repositories.audit_repository import AuditRepository, get_audit_repository
