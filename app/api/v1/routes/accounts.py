@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.config import settings
 from app.core.deps import AdminUser, AuditorOrAdminUser
@@ -35,8 +35,10 @@ CurrencyRepoDep = Annotated[CurrencyRepository, Depends(get_currency_repository)
 async def list_accounts(
     repo: AccountRepoDep,
     _current_user: AuditorOrAdminUser,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> list[Account]:
-    return await repo.list_all()
+    return await repo.list_all(limit=limit, offset=offset)
 
 
 @router.post("", response_model=AccountRead, status_code=201)
