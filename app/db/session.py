@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 
-# エンジン作成: pool_pre_ping=True で接続断を検知
+# pool_pre_ping=True detects broken connections before checkout
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
@@ -17,8 +17,8 @@ engine = create_async_engine(
     max_overflow=settings.db_max_overflow,
 )
 
-# expire_on_commit=False が非同期では必須
-#   → commit後もオブジェクト属性にアクセス可能になる
+# expire_on_commit=False is required for async sessions —
+#   allows attribute access after commit without a lazy-load
 AsyncSessionLocal = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -27,7 +27,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI Depends で使う DB セッション依存性"""
+    """Yield a DB session for FastAPI Depends injection."""
     async with AsyncSessionLocal() as session:
         try:
             yield session
