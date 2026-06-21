@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -62,15 +63,20 @@ async def get_account_balance(
     redis: RedisDep,
     _current_user: AuditorOrAdminUser,
 ) -> BalanceResponse:
-    account = await repo.find_by_id(id)
-    if account is None:
-        raise HTTPException(status_code=404, detail="Account not found")
     cache_key = f"balance:{id}:{as_of.date()}"
     cached = await redis.get(cache_key)
     if cached is not None:
+        data = json.loads(cached)
         return BalanceResponse(
-            balance=int(cached), currency=account.currency, as_of=as_of
+            balance=data["balance"], currency=data["currency"], as_of=as_of
         )
+    account = await repo.find_by_id(id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
     balance = await repo.calculate_balance(id, as_of)
-    await redis.set(cache_key, str(balance), ex=settings.balance_cache_ttl_seconds)
+    await redis.set(
+        cache_key,
+        json.dumps({"balance": int(balance), "currency": account.currency}),
+        ex=settings.balance_cache_ttl_seconds,
+    )
     return BalanceResponse(balance=balance, currency=account.currency, as_of=as_of)

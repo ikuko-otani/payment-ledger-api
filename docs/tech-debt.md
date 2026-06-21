@@ -7,7 +7,6 @@ Items are added when a task is completed and something is intentionally left out
 
 | ID | Sprint | Area | Description | Priority | Added |
 |----|--------|------|-------------|----------|-------|
-| TD-046 | S8 | Perf | `GET /accounts/{id}/balance` cache-hit path re-introduces a DB query. TD-038 fix added `find_by_id` PK lookup (for currency + 404) on every request including cache hits, partially regressing TD-015's zero-DB-query hot path (~37ms). Storing currency alongside balance in the cache value would restore DB-free cache hits. | Low | 2026-06-21 |
 
 ## Resolved
 
@@ -58,6 +57,7 @@ Items are added when a task is completed and something is intentionally left out
 | TD-043 | Japanese comments in core files (`app/db/session.py`, `tests/conftest.py`). Fixed: translated to English for consistency with the codebase English-only convention. | S8-7 |
 | TD-044 | `alembic/env.py:9` Japanese comment (`# ← これがないと .env が読まれない`). Translated to English as part of TD-043 sweep completion. | S8-8 |
 | TD-045 | No concurrent in-flight 409 test for idempotency `pending` state. Added `test_concurrent_inflight_idempotency_returns_409` — two simultaneous requests with the same key yield one 201 and one 409. | S8-8 |
+| TD-046 | `GET /accounts/{id}/balance` cache-hit path re-introduced a DB query (TD-038's `find_by_id` ran on every request including cache hits). Fixed: Redis cache value changed from `str(balance)` to `json.dumps({"balance": ..., "currency": ...})`; cache-hit path now decodes JSON directly without any DB access. Cache-miss path still performs `find_by_id` + `calculate_balance`. | S8-9 |
 
 ---
 
