@@ -117,6 +117,28 @@ write transaction, enables TTL-based expiry, and clears the key on failure so
 retries are not blocked by a previously failed request. The PostgreSQL UNIQUE
 constraint is retained as a safety net.
 
+**Evolved in S7 — request fingerprinting and response replay**:
+
+The implementation now follows a two-phase Redis state machine with
+Stripe-style semantics (`app/dependencies/idempotency.py`):
+
+1. **Phase 1 (new request)**: `SET NX` stores a JSON payload containing a
+   SHA-256 fingerprint of the request body and `"status": "pending"`.
+2. **Phase 2 (on success)**: the pending marker is overwritten with the
+   serialised response body, so future duplicates replay the original `200`
+   response instead of returning `409 Conflict`.
+3. **Fingerprint mismatch**: if the same idempotency key is reused with a
+   different request body, the server returns `422 Unprocessable Entity` —
+   preventing silent request substitution.
+4. **Failure cleanup**: if the request raises an exception after the key is
+   acquired, the key is deleted so the client can retry with the same key.
+
+**Consequence**: the idempotency layer is no longer a simple duplicate gate;
+it is a correctness mechanism that guarantees *exactly-once semantics* for
+successful requests and safe retry for failed ones. The trade-off is
+increased Redis storage per key (response body cached alongside the
+fingerprint) and slightly more complex error-handling logic.
+
 ---
 
 ### Immutable transaction log
@@ -276,6 +298,42 @@ attackers.
 - *Developer experience*: during development a `401` with no context is
   frustrating. Mitigation: detailed error codes in server-side structured
   logs (structlog) visible to operators but not returned to clients.
+
+### 7.5 Why embed role/is_active in the JWT payload (no per-request DB query)
+
+**Decision**: At login (`POST /api/v1/auth/login`), embed `role` and
+`is_active` as additional claims in the JWT payload alongside `sub`
+(user UUID). `get_current_user` (`app/core/deps.py`) decodes the token
+and constructs a lightweight `TokenUser` Pydantic model from the claims —
+no database query is issued on any authenticated request.
+
+See `docs/adr/006-jwt-claims-no-db-per-request.md` for the full ADR.
+
+**What was rejected**: The previous implementation resolved the JWT `sub`
+claim into a full `User` ORM object via `SELECT * FROM users WHERE id = ?`
+on every request. This DB round-trip dominated the latency budget even
+after Redis caching optimisations in S7-4.
+
+**Rationale**:
+- *Latency reduction*: the only fields consumed downstream are `id`,
+  `role`, and `is_active` — all available at login time. Embedding them
+  in the token turns `get_current_user` into a pure in-memory decode
+  (microseconds, not milliseconds).
+- *Dependency elimination*: `get_current_user` no longer requires an
+  `AsyncSession`, removing the DB session from the critical path of
+  every authenticated request.
+- *Consistency with §7.1*: the statelessness argument for JWT (any pod
+  can validate independently) is undermined if every request still hits
+  the DB for user data. Embedding claims completes the stateless design.
+
+**Trade-off — stale claims window**:
+- Role changes and deactivations applied in the database are **not
+  reflected in existing tokens** until those tokens expire. The window
+  is bounded by `ACCESS_TOKEN_EXPIRE_MINUTES` (default: 30 min).
+- Mitigation options (deferred to post-MVP): short-lived tokens (5 min)
+  + silent refresh, or a token blocklist in Redis.
+- For a portfolio project with no production users, the 30-minute
+  revocation window is an acceptable trade-off.
 
 ---
 
@@ -581,6 +639,45 @@ that transaction (see `app/repositories/account_repository.py`, `app/core/redis.
   simultaneously, all of them miss and recompute concurrently. At current MVP
   traffic this is negligible; a production hardening pass would add a
   short-lived lock or "request coalescing" around the cache-fill step.
+
+### 9.4 N+1 prevention strategy (selectinload / contains_eager)
+
+**Decision**: Apply explicit eager-loading strategies to every repository
+query that returns entities with relationships:
+
+| Repository | Strategy | Why this one |
+|------------|----------|-------------|
+| `TransactionRepository.save()` | `selectinload(Transaction.entries)` | After flush, reload the transaction with all its entries in a single additional `SELECT … WHERE transaction_id IN (?)` query |
+| `TransactionRepository.list_all()` | `selectinload(Transaction.entries)` | Batch-load entries for all transactions returned by the list query |
+| `LedgerRepository.list_entries()` | `contains_eager(Entry.transaction)` | The query already `JOIN`s `transactions` for filtering/ordering; `contains_eager` tells SQLAlchemy to populate `Entry.transaction` from the joined row instead of issuing a separate query |
+
+**What was rejected**: SQLAlchemy's default lazy loading, where accessing
+`transaction.entries` or `entry.transaction` triggers an implicit query per
+parent row. In async mode this is not just slow — it raises
+`MissingGreenlet` unless the access happens inside an awaited context
+(see `docs/troubleshooting/sqlalchemy-missing-greenlet-lazy-load.md`).
+
+**Rationale**:
+- *Predictable query count*: `selectinload` always produces exactly 2
+  queries (one for parents, one `IN`-query for children) regardless of
+  result set size. Without it, listing 50 transactions would fire 1 + 50
+  queries.
+- *`contains_eager` for pre-joined data*: when the query already contains
+  a `JOIN` (e.g. `Entry.join(Transaction)` for date filtering), a second
+  `selectinload` would issue a redundant query. `contains_eager` reuses
+  the joined columns at zero additional cost.
+- *Async safety*: explicit eager loading eliminates all implicit lazy-load
+  paths, preventing `MissingGreenlet` errors at runtime.
+
+**Trade-off**:
+- Eager loading fetches related data even when the caller does not access
+  it. For the current API (transactions always return their entries, ledger
+  entries always include their transaction header), this is always needed.
+  If a future endpoint needed transactions without entries, a separate
+  repository method with no eager loading would be appropriate.
+- Query count assertions (`event.listen("before_cursor_execute")` counter)
+  are not yet in place; adding them would catch regressions if a future
+  contributor removes an `options()` call.
 
 ---
 
