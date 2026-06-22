@@ -1,68 +1,109 @@
 # Technical Debt & Known Limitations
 
 This file tracks outstanding technical debt, deferred decisions, and known limitations.
-Items are added when a task is completed and something is intentionally left out of scope.
 
 ## Open Items
 
-| ID | Sprint | Area | Description | Priority | Added |
-|----|--------|------|-------------|----------|-------|
+| ID | Area | Description | Priority |
+|----|------|-------------|----------|
+| TD-047 | Ledger design | Adopt event sourcing (Outbox pattern) for the transaction lifecycle — the current `POSTED → VOIDED` status machine works, but an append-only event log would capture every state transition for compliance replay and debugging. | Medium |
+| TD-048 | CI | Include a baseline load test in CI — Locust results are currently static snapshots in `docs/loadtest/`; running on every PR would catch performance regressions before merge. | Low |
+| TD-049 | Auth | Use short-lived JWTs (5 min) with a refresh endpoint — the current 30-minute token lifetime (see [ADR-006](adr/006-jwt-claims-no-db-per-request.md)) trades latency for a wide revocation window; a refresh flow would tighten it without reintroducing per-request DB lookups. | Medium |
 
 ## Resolved
 
-| ID | Description | Resolved in |
-|----|-------------|-------------|
-| TD-001 | `test_get_transactions_returns_list_shape` and `test_post_then_get_shows_persisted_record` were failing — `override_get_db` in conftest did not commit the session, unlike production `get_db`. Fixed by mirroring the try/commit/except/rollback pattern. | S2-4 |
-| TD-002 | No authentication on any endpoint. All routes were open. | S3-4 |
-| TD-012 | No currency scale management. Added `decimal_places` column to `Currency` model (JPY=0, EUR=2, USD=2). | S4-1 |
-| TD-006 | No structured logging or request tracing. structlog + OpenTelemetry + `RequestLoggingMiddleware` implemented across S3–S5 sprints. Confirmed in design review: all endpoints emit structured logs with `request_id`, `trace_id`, `latency_ms`. | S3–S5 |
-| TD-003 | `GET /transactions` had no pagination. Added `limit` (default 20, max 100) and `offset` query params, consistent with `/ledger` and `/audit-logs`. | pre-S6 |
-| TD-009 | Root `/main.py` leftover from `uv init`. Confirmed absent from the repository (never committed to git). No action required. | pre-S6 |
-| TD-011 | `create_transaction` did not check `is_active`. Added `Account.is_active == True` filter to the account existence query; inactive accounts now return 422 with detail "Unknown or inactive account_ids". | pre-S6 |
-| TD-016 | `Entry.amount` was `Integer` (32-bit). Changed to `BigInteger` in model and generated Alembic migration `20260609_1156_ee54b717aba2`. `alembic/env.py` also updated with `compare_type=True` so future type changes are detected by autogenerate. | pre-S6 |
-| TD-017 | Idempotency key was confirmed before DB commit; failed requests blocked retries for 24h. Fixed: `check_idempotency` converted to generator dependency; `redis.delete` called in `except` block on any failure. | pre-S6 (PR #41) |
-| TD-018 | Balance cache invalidation ran before `get_db` auto-commit, enabling stale re-cache race. Fixed: explicit `await db.commit()` added in `post_transaction` before `redis.delete`. | pre-S6 (PR #41) |
-| TD-026 | `create_async_engine(...)` in `app/db/session.py` used SQLAlchemy defaults (`pool_size=5`, `max_overflow=10`), causing `QueuePool limit of size 5 overflow 10 reached` errors under 100 concurrent locust users (4.88% error rate, p99 ~48s). Fixed: explicit `pool_size`/`max_overflow` added; subsequently made configurable via `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` env vars in TD-029. Confirmed: error rate dropped to 0%. Fixing the pool ceiling exposed the bcrypt bottleneck — see TD-027. | S6-8 (refined S7-2 via TD-029) |
-| TD-027 | `verify_password` and `get_password_hash` (`app/core/security.py`) called `bcrypt` synchronously, blocking FastAPI's event loop for the full bcrypt duration on every `/auth/login` request — ALL concurrent requests queued behind it. Fixed: both functions wrapped in `await asyncio.to_thread(...)`; call sites in `auth.py` and `user_service.py` updated to `await`. | S6-8 |
-| TD-024 | `create_transaction` validated that all `entries[]` share the same `currency`, but never checked that `currency` against `Account.currency`, so a posted entry could mix minor units across currencies in `calculate_balance`. Fixed: after the existing same-currency-across-entries check, each entry's `currency` is now compared against its account's `currency` (resolved via the existing `select(Account.id, Account.currency)` account-existence query, no extra round trip); mismatches raise 422 with the offending `account_id`/`entry_currency`/`account_currency`. | S7-1 |
-| TD-025 | `list_accounts` and `list_transactions` executed `select(...)` without `.order_by(...)`, so PostgreSQL did not guarantee row order — a pagination-correctness risk for `list_transactions` (`limit`/`offset` without `ORDER BY` can return duplicate or skipped rows under concurrent writes) and a non-deterministic-ordering risk for `list_accounts`. Fixed: added `.order_by(Account.code)` to `list_accounts` and `.order_by(Transaction.transaction_date.desc(), Transaction.id)` to `list_transactions`. | S7-1 |
-| TD-028 | Dockerfile's `CMD` changed to a production-equivalent multi-worker server: `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4` (replaces `fastapi dev`). `compose.yaml`'s `api` service overrides this with `command: uv run fastapi dev app/main.py --host 0.0.0.0 --port 8000` for local development, so the source-volume-mounted hot-reload workflow is unchanged. To exercise the multi-worker command locally (e.g. for load testing), comment out the `command:` override and `docker compose up -d api`. | S7-2 |
-| TD-029 | `app/db/session.py`'s `create_async_engine(...)` now reads `pool_size`/`max_overflow` from new `Settings.db_pool_size`/`db_max_overflow` fields (`DB_POOL_SIZE`/`DB_MAX_OVERFLOW` env vars, default `5`/`10`) instead of the hardcoded `20`/`30`. With 4 workers (TD-028), total connections = 4 × (5 + 10) = 60, within PostgreSQL's `max_connections=100`. Re-running the 100-user locust test (`-u 100 -r 10 -t 60s`) against the multi-worker + pool-fixed `api`: aggregated p99 dropped from the S6-8 single-process baseline of 49s to 22s, with 0 failures (vs. 7 `FATAL: sorry, too many clients already` failures in the unfixed-pool TD-028 4-worker experiment). Results: `docs/loadtest/result_100users_s7_2_multiworker_*.csv`. | S7-2 |
-| TD-030 | `_get_converted_amount_usd` split into `_resolve_usd_conversion_rate` (DB lookups for `from_currency`/`to_currency`/`ExchangeRate`, called once per transaction) and `_convert_amount_usd` (pure `amount × rate` calculation, called per entry). `create_transaction` now resolves the conversion rate once before the entries loop. Reduces conversion-related queries from up to `3 × N` (N = entry count) to a fixed 3 (or 0 for `USD` transactions), regardless of N. New test `test_non_usd_transaction_resolves_conversion_rate_once` (`tests/test_transactions.py`) asserts this via `before_cursor_execute` query counting. | S7-2 |
-| TD-019 | Service layer (`transaction_service`, `currency_service`, `user_service`) raised `fastapi.HTTPException` directly. Added `app/core/exceptions.py` with `DomainError`/`ValidationError`(422)/`ConflictError`(409), and a single `@app.exception_handler(DomainError)` in `app/main.py` — Starlette's MRO-based handler lookup covers all subclasses. All `HTTPException` raises in the service layer replaced with the corresponding domain exception; `grep -rn "from fastapi" app/services/` now returns nothing. | S7-3 |
-| TD-022 | `accounts.py:create_account` and `audit_logs.py:get_audit_logs` embedded ORM queries and `log_action` calls directly in the route handler, bypassing the service layer used by every other endpoint. Extracted to `app/services/account_service.py:create_account` and `app/services/audit_service.py:list_audit_logs`; both routes now delegate entirely (3-layer rule). Behavior-preserving — existing `tests/test_accounts.py`, `tests/test_audit_log.py`, `tests/test_audit_logs_endpoint.py` pass unchanged. | S7-3 |
-| TD-031 | `create_user`'s duplicate-email check was check-then-insert (TOCTOU): full-row `select(User)` pre-check, with no handling of the race path. Fixed: pre-check narrowed to `select(User.id)`, and `try/except IntegrityError` added around `db.flush()`, converting the race-loser's failure to `ConflictError` (409) — same outcome as the pre-check path. New test `test_create_user_concurrent_duplicate_email_returns_conflict` (`tests/test_users.py`) reproduces the race via `asyncio.gather` with two independent `AsyncSession`s from the same engine, asserting exactly one success and one 409. | S7-3 |
-| TD-021 | `POST /currencies`, `POST /exchange-rates`, and `POST /users` did not call `log_action`, leaving admin-mutating operations invisible to the audit trail. Fixed: `create_currency` and `create_exchange_rate` (`app/services/currency_service.py`) and `create_user` (`app/services/user_service.py`) now append an audit row after a successful flush, mirroring the `create_account`/`create_transaction` pattern. `create_currency` gained a `current_user` parameter (the `/currencies` route now passes its `AdminUser`); `create_exchange_rate` reuses its existing `created_by` user. `register_user` is unauthenticated, so the user-creation audit row self-references the new user (`user_id == entity_id`). New tests in `tests/test_audit_log.py` (`test_create_currency_writes_audit_log`, `test_create_exchange_rate_writes_audit_log`, `test_register_user_writes_audit_log`) assert an `audit_logs` row exists for each operation. | fix/td-021-audit-log-missing |
-| TD-032 | CI `lint` job (`uv run pip-audit`) started failing on `main` after Dependabot PRs #65-69 were merged, flagging 8 known vulnerabilities in transitive dependencies: `cryptography` (GHSA-537c-gmf6-5ccf), `python-multipart` (CVE-2026-53538/39/40), and `starlette` (CVE-2026-48817/48818/54282/54283). Discovered when PR #71's `lint` check failed (and `build` was skipped as a result) despite the PR not touching `pyproject.toml`/`uv.lock`; confirmed via `gh run list --branch main` that the last several `main` CI runs were already failing for the same reason. Fixed: `uv lock --upgrade-package cryptography --upgrade-package python-multipart --upgrade-package starlette` (cryptography 48.0.0→49.0.0, python-multipart 0.0.27→0.0.32, starlette 1.0.1→1.3.1), then `uv sync --all-groups`. `uv run pip-audit` now reports "No known vulnerabilities found"; `ruff check`/`ruff format --check`/`mypy --strict` all pass; full pytest suite (113 tests) passes with 94.12% coverage. | S7-3 (`fix/td-032-ci-dependency-vulnerabilities`) |
-| TD-023 | Migrated from `python-jose` to `PyJWT` (`pyproject.toml`, `app/core/security.py`, `app/core/deps.py`). Eliminates the `ecdsa` transitive dependency (GHSA-wj6h-64fc-37mp / CVE-2024-23342) flagged by GitHub Dependabot. The app uses HS256 (HMAC) only — the vulnerable ECDSA code paths in `ecdsa` were never exercised. `jwt.encode`/`jwt.decode` API is identical for HS256; `JWTError` renamed to `jwt.PyJWTError`; `cast(str, ...)` wrapper removed (PyJWT returns `str` directly). | S7-3 (`fix/td-023-pyjwt-migration`) |
-| TD-020 | `core/cache.py:get_redis_client` and `dependencies/idempotency.py:get_redis` created a new `ConnectionPool` on every request via `aioredis.from_url()`. Fixed: single `aioredis.Redis` client created in `app/main.py:lifespan`, stored on `app.state.redis`, injected via `get_redis_client(request: Request)` in new `app/core/redis.py`. `app/core/cache.py` deleted; all consumers (`accounts.py`, `transactions.py`, `idempotency.py`) import `RedisDep` from `app.core.redis`. Hit latency improved ~48%: avg ~124ms (before) → avg ~65ms (after); see TD-015 for remaining bottleneck. | S7-4 |
-| TD-010 | `.gitignore` was sparse: `.pytest_cache/`, `.idea/`, `.vscode/`, build artifacts (`dist/`, `build/`, `*.egg-info/`) were not excluded. Fixed: added Python standard patterns following the GitHub Python .gitignore template. | S7-5 |
-| TD-007 | `ARCHITECTURE.md` had two problems: (1) inline `ADR-NNN` labels conflicted with the separate `docs/adr/` numbering; (2) stale content (ADR-003 still described PostgreSQL UNIQUE despite Redis being used since S2-3; Section 6 listed Redis as "future"; Section 4 showed `python-jose` despite PyJWT migration in S7-3; Section 9.3 referenced deleted `app/core/cache.py`). Fixed: renamed all inline `ADR-NNN` headings to `Design Decision:`, updated stale content, added cross-reference note clarifying the two numbering systems. | S7-5 |
-| TD-015 | `GET /accounts/{id}/balance` end-to-end latency on cache hit. Before: ~65ms dominated by `get_current_user` DB re-query. Fixed in S7-5: embedded `role`/`is_active` in JWT claims; `get_current_user` now pure in-memory (no DB). After: ~37ms avg (GET /accounts, requests 2–5, cold-start excluded). ~43% improvement vs ~65ms baseline. Primary cause — get_current_user DB query eliminated via JWT claims embedding. See `docs/adr/006-jwt-claims-no-db-per-request.md`. | S7-5 |
-| TD-033 | `get_currencies` (`app/services/currency_service.py`) executed `select(Currency)` without `.order_by(...)`, returning rows in PostgreSQL heap-scan order — non-deterministic under concurrent inserts. Same pattern as TD-025 (which fixed `list_accounts`/`list_transactions` but missed this endpoint). Fixed: added `.order_by(Currency.code)`. New test `test_currencies_list_returns_stable_order` in `tests/test_transactions_multi_currency.py` asserts ascending code order. | S7-6 |
-| TD-034 | `get_exchange_rates` (`app/services/currency_service.py`) executed `select(ExchangeRate)` without `.order_by(...)` — same non-deterministic-ordering risk as TD-033. Fixed: added `.order_by(ExchangeRate.effective_date.desc(), ExchangeRate.id)`. | S7-6 |
-| TD-035 | `accounts.currency` and `entries.currency` were plain `String(3)` with no FK to `currencies.code`. Fixed: added `ForeignKey("currencies.code")` to both columns; Alembic migration `20260618_1856_d117489c7a4b` includes a data-integrity pre-check before applying the constraint. `create_account` now validates currency existence at the application layer (422) before the DB write. | S8-1 |
-| TD-008 | Repository layer was not separated: services received `AsyncSession` directly and called SQLAlchemy inline. Fixed in S7-8: `SQLAlchemyAccountRepository`, `SQLAlchemyCurrencyRepository`, `SQLAlchemyTransactionRepository`, `SQLAlchemyLedgerRepository`, `SQLAlchemyAuditRepository`, `SQLAlchemyUserRepository` added under `app/repositories/`. All services (`transaction_service`, `account_service`, `currency_service`, `user_service`) and routes migrated to accept repository abstractions; `audit_service.py` deleted as fully dead code after migration (PR #81). | S7-8 |
-| TD-004 | Duplicate idempotency-key returned 409 Conflict. Fixed: Stripe-style replay — cached response JSON returned with 200 OK on retry. | S8-2 |
-| TD-005 | Idempotency key stored in Redis but response body not cached. Fixed: `check_idempotency` caches response JSON via `IdempotencyContext.cache()` after route handler success. | S8-2 |
-| TD-013 | coverage.py under-reported async coverage (lines after `await` not recorded by `sys.settrace`). Fixed: `[tool.coverage.run] core = "sysmon"` added to `pyproject.toml`, enabling `sys.monitoring` backend (Python 3.12+) via coverage.py 7.14. | S8-3 |
-| TD-014 | `Makefile` not usable on Windows. Fixed: replaced with `poethepoet` tasks (`lint`/`format`/`typecheck`/`check`) in `[tool.poe.tasks]` in `pyproject.toml`; run via `uv run poe <task>`. `Makefile` deleted. | S8-3 |
-| TD-036 | `app/services/balance.py` (`calculate_balance`) was dead code after S7-8 repository layer migration. `tests/test_balance.py` migrated to use `SQLAlchemyAccountRepository.calculate_balance()`; `balance.py` deleted. | S8-4 |
-| TD-037 | `app/services/ledger_service.py` (`get_ledger_entries`) was dead code after S7-8 repository layer migration. No test imports; deleted directly. | S8-4 |
-| TD-038 | `BalanceResponse` returned `balance: int` without currency code — caller could not determine if 1000 meant €10.00 or ¥1000. Fixed: added `currency: str` (ISO 4217) field; `GET /accounts/{id}/balance` now fetches the account's currency via `find_by_id` PK lookup (also adds 404 for non-existent accounts). | S8-5 |
-| TD-040 | `/accounts`, `/currencies`, `/exchange-rates` returned unbounded result sets (no `limit`/`offset`). Fixed: added `limit` (default 20, ge=1, le=100) and `offset` (default 0, ge=0) query parameters, consistent with `/transactions`, `/ledger`, `/audit-logs`. Repository `list_all` / `list_exchange_rates` now accept `limit`/`offset` and apply `.limit().offset()`. | S8-5 |
-| TD-041 | Idempotency key not bound to request body; same key with different body silently replayed original response. Fixed: SHA-256 fingerprint of the request body is stored alongside the idempotency key in Redis; on replay, fingerprint is compared and mismatches return 422. | S8-6 |
-| TD-042 | `POST /transactions` used `redis.keys("balance:{id}:*")` (O(N) full keyspace scan) for cache invalidation. Fixed: replaced with `redis.scan_iter(match=pattern)` which uses cursor-based SCAN (O(1) per call, non-blocking). | S8-6 |
-| TD-039 | `find_exchange_rate` used exact date match (`effective_date == transaction_date`); holidays/weekends with no rate row returned 422 instead of using most recent available rate. Fixed: changed to `effective_date <= transaction_date ORDER BY effective_date DESC LIMIT 1`. | S8-7 |
-| TD-043 | Japanese comments in core files (`app/db/session.py`, `tests/conftest.py`). Fixed: translated to English for consistency with the codebase English-only convention. | S8-7 |
-| TD-044 | `alembic/env.py:9` Japanese comment (`# ← これがないと .env が読まれない`). Translated to English as part of TD-043 sweep completion. | S8-8 |
-| TD-045 | No concurrent in-flight 409 test for idempotency `pending` state. Added `test_concurrent_inflight_idempotency_returns_409` — two simultaneous requests with the same key yield one 201 and one 409. | S8-8 |
-| TD-046 | `GET /accounts/{id}/balance` cache-hit path re-introduced a DB query (TD-038's `find_by_id` ran on every request including cache hits). Fixed: Redis cache value changed from `str(balance)` to `json.dumps({"balance": ..., "currency": ...})`; cache-hit path now decodes JSON directly without any DB access. Cache-miss path still performs `find_by_id` + `calculate_balance`. | S8-9 |
+Items are compressed to one-line summaries. Each row describes the problem, fix, and observable effect.
+
+### Security & Auth
+
+| ID | Summary |
+|----|---------|
+| TD-002 | No authentication → JWT auth + RBAC added to all endpoints |
+| TD-023 | `python-jose` had CVE in transitive `ecdsa` dependency → migrated to PyJWT |
+| TD-032 | CI failing from dependency CVEs (cryptography, starlette, python-multipart) → upgraded all |
+
+### Data Integrity
+
+| ID | Summary |
+|----|---------|
+| TD-016 | `Entry.amount` was 32-bit `Integer` → changed to `BigInteger` |
+| TD-024 | Entry currency not validated against account currency → cross-check added, mismatch returns 422 |
+| TD-035 | `accounts.currency` and `entries.currency` had no FK → `ForeignKey("currencies.code")` added |
+| TD-012 | No currency scale management → `decimal_places` column added to `Currency` model |
+| TD-039 | Exchange rate required exact date match → changed to most recent rate on-or-before |
+
+### Idempotency
+
+| ID | Summary |
+|----|---------|
+| TD-004 | Duplicate idempotency key returned 409 → Stripe-style 200 replay with cached response |
+| TD-005 | Response body not cached alongside key → `IdempotencyContext.cache()` added |
+| TD-017 | Key confirmed before DB commit; failed requests blocked retries for 24h → cleanup on failure via generator dependency |
+| TD-041 | Key not bound to request body → SHA-256 fingerprint comparison, mismatch returns 422 |
+| TD-045 | No concurrent in-flight test → added `test_concurrent_inflight_idempotency_returns_409` |
+
+### Performance & Scalability
+
+| ID | Summary |
+|----|---------|
+| TD-026 | Default connection pool too small → configurable `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` env vars |
+| TD-027 | Synchronous bcrypt blocked the event loop → wrapped in `asyncio.to_thread` |
+| TD-020 | Redis connection pool created per request → singleton lifespan client, ~48% latency improvement |
+| TD-015 | Balance endpoint ~65ms on cache hit due to per-request DB query → JWT claims eliminated DB lookup, ~37ms |
+| TD-046 | Balance cache hit re-introduced DB query for currency → cached currency alongside balance in Redis JSON |
+| TD-030 | Currency conversion queries scaled O(N) per entry → resolve rate once per transaction |
+| TD-042 | `redis.keys()` O(N) keyspace scan for cache invalidation → cursor-based `scan_iter` |
+| TD-028 | Dockerfile used dev server → multi-worker `uvicorn` (4 workers) for production |
+| TD-029 | Hardcoded pool settings → env-configurable, total connections bounded within `max_connections` |
+
+### API Correctness
+
+| ID | Summary |
+|----|---------|
+| TD-003 | `GET /transactions` had no pagination → `limit`/`offset` added |
+| TD-040 | `/accounts`, `/currencies`, `/exchange-rates` returned unbounded result sets → pagination added |
+| TD-025 | List queries had no `ORDER BY` → deterministic ordering added (pagination correctness) |
+| TD-033 | Currencies list non-deterministic order → `ORDER BY code` added |
+| TD-034 | Exchange rates list non-deterministic order → `ORDER BY effective_date DESC` added |
+| TD-011 | `create_transaction` didn't check `is_active` → inactive accounts now return 422 |
+| TD-038 | `BalanceResponse` missing currency code → `currency` field added |
+| TD-018 | Balance cache invalidation ran before commit → explicit commit before cache delete |
+| TD-031 | TOCTOU race on user email uniqueness → `IntegrityError` catch added, tested with `asyncio.gather` |
+
+### Architecture & Code Quality
+
+| ID | Summary |
+|----|---------|
+| TD-008 | No repository layer separation → 6 repository abstractions extracted under `app/repositories/` |
+| TD-019 | Services raised `HTTPException` directly → domain exception hierarchy (`DomainError` / `ValidationError` / `ConflictError`) |
+| TD-022 | Route handlers embedded ORM queries → extracted to service layer |
+| TD-036 | Dead `balance.py` service code → deleted after repository migration |
+| TD-037 | Dead `ledger_service.py` code → deleted after repository migration |
+| TD-021 | Admin mutations missing audit log entries → audit rows added for currencies, exchange rates, users |
+
+### Observability & Tooling
+
+| ID | Summary |
+|----|---------|
+| TD-006 | No structured logging or request tracing → structlog + OpenTelemetry + Jaeger |
+| TD-013 | coverage.py under-reported async lines → `sys.monitoring` backend enabled (Python 3.12+) |
+| TD-014 | `Makefile` not cross-platform → replaced with `poethepoet` tasks |
+| TD-010 | `.gitignore` incomplete → Python standard patterns added |
+| TD-007 | `ARCHITECTURE.md` had stale content and numbering conflicts → updated |
+| TD-043 | Japanese comments in core files → translated to English |
+| TD-044 | Japanese comment in `alembic/env.py` → translated to English |
+
+### Test Infrastructure
+
+| ID | Summary |
+|----|---------|
+| TD-001 | Test fixture session didn't commit → mirrored production `try/commit/except/rollback` pattern |
+| TD-009 | Root `main.py` leftover from `uv init` → confirmed absent, no action needed |
 
 ---
 
 ## How to Use This File
 
-- **Add a row** when you intentionally leave something out of a Sprint Goal.
-- **Move to Resolved** when the item is addressed in a later Sprint.
+- **Add a row** to Open Items when you intentionally leave something out of scope.
+- **Move to Resolved** when the item is addressed.
 - **Priority**: `High` = blocks production readiness / `Medium` = degrades quality / `Low` = nice-to-have.

@@ -150,26 +150,23 @@ Each trace shows the full request lifecycle including child spans for individual
 
 ## Performance
 
-Load tested with [Locust](https://locust.io/) simulating authenticated clients mixing transaction writes (`POST /api/v1/transactions`, weight 7) and balance reads (`GET /api/v1/accounts/{id}/balance`, weight 3).
+Load tested with [Locust](https://locust.io/) simulating authenticated clients mixing transaction writes (`POST /api/v1/transactions`, weight 7) and balance reads (`GET /api/v1/accounts/{id}/balance`, weight 3). **0% error rate** at all concurrency levels (100 / 300 / 500 users).
 
-### Results (single process, 60s duration)
+The goal was to **locate bottlenecks**, not to publish latency SLAs. The single-process dev server saturates at ~10 req/s — absolute p99 reflects client queueing at the saturation point, not per-request compute time.
 
-| Users | Requests | Failures | Req/s | p99 Latency |
-|-------|----------|----------|-------|-------------|
-| 100 | 133 | 0 (0%) | 2.43 | 49s |
-| 300 | 373 | 0 (0%) | 6.56 | 51s |
-| 500 | 542 | 0 (0%) | 9.61 | 51s |
+### Bottleneck analysis and scaling results
 
-**0% error rate** at all concurrency levels.
+Two bottlenecks were identified and fixed during load testing:
 
-### Multi-worker comparison
+1. **Connection pool exhaustion** — default `pool_size=5` caused `QueuePool limit reached` errors under 100 concurrent users. Fixed by making pool size configurable via environment variables.
+2. **Synchronous bcrypt on the event loop** — `verify_password` blocked all concurrent requests for the full bcrypt duration. Fixed by wrapping in `asyncio.to_thread`.
 
-| Workers | Requests | Req/s | p99 Latency |
-|---------|----------|-------|-------------|
-| 1 (dev) | 133 | 2.43 | 49s |
-| 4 | 976 | 17.30 | 23s |
+| Config | Req/s | 0% errors | vs. baseline |
+|--------|-------|-----------|--------------|
+| 1 worker (dev) | 2.43 | Yes | — |
+| 4 workers | 17.30 | Yes | **7× throughput** |
 
-Throughput improved **~7x** and latency dropped by **more than half** with 4 workers, confirming the single-process dev server as the bottleneck.
+Scaling to 4 Uvicorn workers after these fixes raised throughput ~7× and cut p99 by more than half.
 
 Raw results: [`docs/loadtest/`](docs/loadtest/)
 
