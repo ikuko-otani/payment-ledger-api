@@ -73,13 +73,12 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO users (id, email, hashed_password, role, is_active, created_at)"
-                    " VALUES (:id, :email, :hashed_password, CAST(:role AS userrole), :is_active, :created_at)"
+                    " VALUES (:id, :email, :hashed_password, 'admin', :is_active, :created_at)"
                 ),
                 {
                     "id": str(DEMO_USER_ID),
                     "email": DEMO_EMAIL,
                     "hashed_password": hashed,
-                    "role": "admin",
                     "is_active": True,
                     "created_at": now,
                 },
@@ -129,13 +128,12 @@ async def seed() -> None:
                 await conn.execute(
                     text(
                         "INSERT INTO accounts (id, code, name, account_type, currency, is_active, created_at, updated_at)"
-                        " VALUES (:id, :code, :name, CAST(:account_type AS accounttype), :currency, :is_active, :created_at, :updated_at)"
+                        f" VALUES (:id, :code, :name, '{acct_type}', :currency, :is_active, :created_at, :updated_at)"
                     ),
                     {
                         "id": str(acct_id),
                         "code": code,
                         "name": name,
-                        "account_type": acct_type,
                         "currency": "USD",
                         "is_active": True,
                         "created_at": now,
@@ -157,13 +155,12 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO transactions (id, description, transaction_date, status, posted_at, created_at)"
-                    " VALUES (:id, :description, :transaction_date, CAST(:status AS transactionstatus), :posted_at, :created_at)"
+                    " VALUES (:id, :description, :transaction_date, 'posted', :posted_at, :created_at)"
                 ),
                 {
                     "id": str(TRANSACTION_ID),
                     "description": "Demo: Cash sale $50.00",
                     "transaction_date": date.today(),
-                    "status": "posted",
                     "posted_at": now,
                     "created_at": now,
                 },
@@ -171,13 +168,12 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
-                    " VALUES (:id, :transaction_id, :account_id, CAST(:direction AS direction), :amount, :currency, :converted_amount_usd)"
+                    " VALUES (:id, :transaction_id, :account_id, 'debit', :amount, :currency, :converted_amount_usd)"
                 ),
                 {
                     "id": str(ENTRY_DEBIT_ID),
                     "transaction_id": str(TRANSACTION_ID),
                     "account_id": str(CASH_ACCOUNT_ID),
-                    "direction": "debit",
                     "amount": 5000,
                     "currency": "USD",
                     "converted_amount_usd": 5000,
@@ -186,13 +182,12 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
-                    " VALUES (:id, :transaction_id, :account_id, CAST(:direction AS direction), :amount, :currency, :converted_amount_usd)"
+                    " VALUES (:id, :transaction_id, :account_id, 'credit', :amount, :currency, :converted_amount_usd)"
                 ),
                 {
                     "id": str(ENTRY_CREDIT_ID),
                     "transaction_id": str(TRANSACTION_ID),
                     "account_id": str(REVENUE_ACCOUNT_ID),
-                    "direction": "credit",
                     "amount": 5000,
                     "currency": "USD",
                     "converted_amount_usd": 5000,
