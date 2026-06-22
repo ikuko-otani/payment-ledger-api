@@ -73,7 +73,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO users (id, email, hashed_password, role, is_active, created_at)"
-                    " VALUES (:id, :email, :hashed_password, :role, :is_active, :created_at)"
+                    " VALUES (:id, :email, :hashed_password, CAST(:role AS userrole), :is_active, :created_at)"
                 ),
                 {
                     "id": str(DEMO_USER_ID),
@@ -129,7 +129,7 @@ async def seed() -> None:
                 await conn.execute(
                     text(
                         "INSERT INTO accounts (id, code, name, account_type, currency, is_active, created_at, updated_at)"
-                        " VALUES (:id, :code, :name, :account_type, :currency, :is_active, :created_at, :updated_at)"
+                        " VALUES (:id, :code, :name, CAST(:account_type AS accounttype), :currency, :is_active, :created_at, :updated_at)"
                     ),
                     {
                         "id": str(acct_id),
@@ -157,7 +157,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO transactions (id, description, transaction_date, status, posted_at, created_at)"
-                    " VALUES (:id, :description, :transaction_date, :status, :posted_at, :created_at)"
+                    " VALUES (:id, :description, :transaction_date, CAST(:status AS transactionstatus), :posted_at, :created_at)"
                 ),
                 {
                     "id": str(TRANSACTION_ID),
@@ -171,7 +171,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
-                    " VALUES (:id, :transaction_id, :account_id, :direction, :amount, :currency, :converted_amount_usd)"
+                    " VALUES (:id, :transaction_id, :account_id, CAST(:direction AS direction), :amount, :currency, :converted_amount_usd)"
                 ),
                 {
                     "id": str(ENTRY_DEBIT_ID),
@@ -186,7 +186,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
-                    " VALUES (:id, :transaction_id, :account_id, :direction, :amount, :currency, :converted_amount_usd)"
+                    " VALUES (:id, :transaction_id, :account_id, CAST(:direction AS direction), :amount, :currency, :converted_amount_usd)"
                 ),
                 {
                     "id": str(ENTRY_CREDIT_ID),
