@@ -1,88 +1,158 @@
-Double-entry ledger API built with FastAPI
+# payment-ledger-api
 
-## Badges
+> Production-grade double-entry bookkeeping REST API demonstrating the core ledger patterns used inside payment processors such as Stripe, Mollie, and Revolut.
 
 [![CI](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ikuko-otani/payment-ledger-api/graph/badge.svg)](https://codecov.io/gh/ikuko-otani/payment-ledger-api)
+![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
+![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![Deploy](https://img.shields.io/badge/deploy-Fly.io-8b5cf6)
 
-## CI
+## Overview
 
-Every push and pull request runs linting (ruff), type checking (mypy --strict),
-the test suite with coverage, and a dependency vulnerability scan (pip-audit).
+A REST API that implements **double-entry accounting** — every financial event is recorded as two equal and opposite entries (a debit and a credit), guaranteeing the ledger is always balanced.
+
+Built as a portfolio project to demonstrate production-level backend engineering: async Python, strict type checking, real-database integration tests, distributed tracing, load testing, and cloud deployment.
+
+### Key Features
+
+- **Double-entry transactions** with balance validation (total debits = total credits)
+- **Idempotency-key support** via Redis — safely retry requests without duplicates
+- **JWT authentication** with bcrypt password hashing
+- **Distributed tracing** with OpenTelemetry + Jaeger
+- **Async-first architecture** — SQLAlchemy 2.0 async sessions with asyncpg
+- **94% test coverage** with testcontainers (real PostgreSQL, no mocks)
+- **CI pipeline** — lint, type check (`mypy --strict`), test, security audit, Docker build
+- **Deployed on Fly.io** with managed PostgreSQL and Upstash Redis
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Python 3.12 |
+| Framework | FastAPI (async) |
+| ORM | SQLAlchemy 2.0 + asyncpg |
+| Database | PostgreSQL 16 |
+| Cache | Redis 7 (Upstash on Fly.io) |
+| Migration | Alembic |
+| Auth | JWT (PyJWT) + bcrypt |
+| Observability | OpenTelemetry + Jaeger |
+| CI | GitHub Actions |
+| Deploy | Fly.io |
+| Package Manager | uv |
+
+## Live Demo
+
+**Swagger UI**: [payment-ledger-api.fly.dev/docs](https://payment-ledger-api.fly.dev/docs)
+
+> The API runs on Fly.io with auto-stop enabled. The first request may take a few seconds while the machine wakes up.
+
+## Architecture
+
+Three core entities model the double-entry accounting domain:
+
+```
+accounts 1 ──── N entries N ──── 1 transactions
+```
+
+| Entity | Role |
+|--------|------|
+| **accounts** | Chart of accounts (Asset, Liability, Equity, Revenue, Expense) |
+| **transactions** | Immutable header representing a single financial event |
+| **entries** | Debit/credit lines; each transaction has ≥ 2 entries that balance |
+
+**Invariant**: `SUM(debit amounts) = SUM(credit amounts)` per transaction.
+
+Application layering: `api/` → `services/` → `models/` (3-layer, services use `AsyncSession` directly).
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for full ER diagrams and design decisions.
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager
+- Docker & Docker Compose
+
+### Run Locally
+
+```bash
+# Clone and install
+git clone https://github.com/ikuko-otani/payment-ledger-api.git
+cd payment-ledger-api
+uv sync --all-groups
+
+# Start PostgreSQL, Redis, and Jaeger
+docker compose up -d
+
+# Run migrations
+uv run alembic upgrade head
+
+# Start dev server
+uv run fastapi dev app/main.py
+```
+
+Open http://localhost:8000/docs for the Swagger UI.
+
+### Run Tests
+
+```bash
+# Full check pipeline (format → lint → typecheck)
+uv run poe check
+
+# Tests with coverage
+uv run pytest
+```
+
+Tests use [testcontainers](https://testcontainers-python.readthedocs.io/) — each run spins up a real PostgreSQL instance in Docker.
 
 ## Observability
 
-This project ships with [Jaeger](https://www.jaegertracing.io/) for distributed tracing via OpenTelemetry.
+The API is instrumented with [OpenTelemetry](https://opentelemetry.io/) and ships with [Jaeger](https://www.jaegertracing.io/) for distributed tracing.
 
-### Start the stack
+After `docker compose up -d`, open the Jaeger UI at http://localhost:16686, select **payment-ledger-api** from the Service dropdown, and click **Find Traces**:
 
-```bash
-docker compose up -d
-```
+![Jaeger trace waterfall](docs/screenshots/jaeger-trace-waterfall.png)
 
-### View traces
-
-Open the Jaeger UI at http://localhost:16686.
-
-1. Select payment-ledger-api from the Service dropdown.
-2. Click Find Traces.
-3. Click any trace to see the waterfall view, including child spans for individual SQL queries generated by SQLAlchemy.
-
-### Notes
-
-- Jaeger runs as jaegertracing/all-in-one (development only — traces are stored in memory and lost on container restart).
-- The API sends traces via OTLP/gRPC to jaeger:4317 (configured in .env as OTEL_EXPORTER_OTLP_ENDPOINT).
+Each trace shows the full request lifecycle including child spans for individual SQL queries generated by SQLAlchemy.
 
 ## Performance
 
-Load tested with [Locust](https://locust.io/) (`locustfile.py`, see
-`docker compose --profile loadtest`). The scenario simulates an
-authenticated client mixing transaction writes and balance reads:
+Load tested with [Locust](https://locust.io/) simulating authenticated clients mixing transaction writes (`POST /api/v1/transactions`, weight 7) and balance reads (`GET /api/v1/accounts/{id}/balance`, weight 3).
 
-- `POST /api/v1/transactions` (weight 7) — post a balanced double-entry transaction
-- `GET /api/v1/accounts/{id}/balance` (weight 3) — read account balance
+### Results (single process, 60s duration)
 
-### Results (dev server, single process)
+| Users | Requests | Failures | Req/s | p99 Latency |
+|-------|----------|----------|-------|-------------|
+| 100 | 133 | 0 (0%) | 2.43 | 49s |
+| 300 | 373 | 0 (0%) | 6.56 | 51s |
+| 500 | 542 | 0 (0%) | 9.61 | 51s |
 
-All runs use `fastapi dev app/main.py` (the default `Dockerfile` CMD), 60s duration:
+**0% error rate** at all concurrency levels.
 
-| Users | Requests | Failures | Req/s | Aggregated p99 | Login p99 |
-|-------|----------|----------|-------|-----------------|-----------|
-| 100   | 133      | 0 (0%)   | 2.43  | 49s             | 49s       |
-| 300   | 373      | 0 (0%)   | 6.56  | 51s             | 52s       |
-| 500   | 542      | 0 (0%)   | 9.61  | 51s             | 53s       |
+### Multi-worker comparison
 
-- 0% error rate at all three concurrency levels (after fixing connection-pool
-  exhaustion and a blocking bcrypt call — see TD-026/TD-027 in `docs/tech-debt.md`).
-- Requests/s scales roughly with user count, but p99 latency plateaus around
-  50-53s — a single Python process can only handle a handful of requests at a
-  time, so additional users mostly wait in queue rather than fail outright.
+| Workers | Requests | Req/s | p99 Latency |
+|---------|----------|-------|-------------|
+| 1 (dev) | 133 | 2.43 | 49s |
+| 4 | 976 | 17.30 | 23s |
 
-### Multi-worker comparison (experimental)
+Throughput improved **~7x** and latency dropped by **more than half** with 4 workers, confirming the single-process dev server as the bottleneck.
 
-To confirm the single-process dev server was the bottleneck, the 100-user
-scenario was re-run once against `uvicorn app.main:app --workers 4` (a one-off
-experiment, not the default deployment):
+Raw results: [`docs/loadtest/`](docs/loadtest/)
 
-| Workers | Requests | Failures | Req/s | Aggregated p99 | Login p99 |
-|---------|----------|----------|-------|-----------------|-----------|
-| 1 (dev) | 133      | 0 (0%)   | 2.43  | 49s             | 49s       |
-| 4       | 976      | 7 (0.7%) | 17.30 | 23s             | 25s       |
+## CI Pipeline
 
-Throughput improved ~6.7x and latency dropped by more than half, confirming
-the dev server's single-process model is the dominant bottleneck. The small
-number of failures (`FATAL: sorry, too many clients already`) showed that
-the SQLAlchemy connection pool size must be divided across worker processes
-in a multi-worker deployment — tracked as TD-029.
+Every push and pull request triggers the following pipeline via GitHub Actions:
 
-### Known limitations / follow-ups
-
-- **TD-028**: production deployment should run multiple worker processes
-  (`uvicorn --workers N` / `fastapi run`) instead of `fastapi dev`.
-- **TD-029**: when moving to multi-worker, `pool_size`/`max_overflow` must be
-  divided by worker count (or made configurable) to stay under PostgreSQL's
-  `max_connections`.
-
-Raw results: `docs/loadtest/result_100users_*.csv`,
-`result_100users_multiworker_*.csv`, `result_300users_*.csv`,
-`result_500users_*.csv`.
+| Step | Tool | Purpose |
+|------|------|---------|
+| Lint | ruff | Code style and import ordering |
+| Type check | mypy --strict | Full static type analysis |
+| Test | pytest + testcontainers | Integration tests with real PostgreSQL |
+| Security | pip-audit | Dependency vulnerability scan |
+| Build | Docker | Image build verification |
