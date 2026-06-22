@@ -299,6 +299,42 @@ attackers.
   frustrating. Mitigation: detailed error codes in server-side structured
   logs (structlog) visible to operators but not returned to clients.
 
+### 7.5 Why embed role/is_active in the JWT payload (no per-request DB query)
+
+**Decision**: At login (`POST /api/v1/auth/login`), embed `role` and
+`is_active` as additional claims in the JWT payload alongside `sub`
+(user UUID). `get_current_user` (`app/core/deps.py`) decodes the token
+and constructs a lightweight `TokenUser` Pydantic model from the claims —
+no database query is issued on any authenticated request.
+
+See `docs/adr/006-jwt-claims-no-db-per-request.md` for the full ADR.
+
+**What was rejected**: The previous implementation resolved the JWT `sub`
+claim into a full `User` ORM object via `SELECT * FROM users WHERE id = ?`
+on every request. This DB round-trip dominated the latency budget even
+after Redis caching optimisations in S7-4.
+
+**Rationale**:
+- *Latency reduction*: the only fields consumed downstream are `id`,
+  `role`, and `is_active` — all available at login time. Embedding them
+  in the token turns `get_current_user` into a pure in-memory decode
+  (microseconds, not milliseconds).
+- *Dependency elimination*: `get_current_user` no longer requires an
+  `AsyncSession`, removing the DB session from the critical path of
+  every authenticated request.
+- *Consistency with §7.1*: the statelessness argument for JWT (any pod
+  can validate independently) is undermined if every request still hits
+  the DB for user data. Embedding claims completes the stateless design.
+
+**Trade-off — stale claims window**:
+- Role changes and deactivations applied in the database are **not
+  reflected in existing tokens** until those tokens expire. The window
+  is bounded by `ACCESS_TOKEN_EXPIRE_MINUTES` (default: 30 min).
+- Mitigation options (deferred to post-MVP): short-lived tokens (5 min)
+  + silent refresh, or a token blocklist in Redis.
+- For a portfolio project with no production users, the 30-minute
+  revocation window is an acceptable trade-off.
+
 ---
 
 ## 8. Multi-Currency Design (S4)
