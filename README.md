@@ -28,6 +28,14 @@ Built as a portfolio project to demonstrate production-level backend engineering
 - **CI pipeline** — lint, type check (`mypy --strict`), test, security audit, Docker build
 - **Deployed on Fly.io** with managed PostgreSQL and Upstash Redis
 
+## Why I Built This
+
+I spent 11 years building and maintaining accounting and ERP systems — mostly in PHP and Oracle PL/SQL. Ledger integrity, balanced transactions, and month-end close procedures were everyday concerns.
+
+When I decided to transition into modern backend engineering, I chose a domain I already understood deeply: double-entry bookkeeping. This let me focus on learning the new stack (async Python, SQLAlchemy 2.0, Redis, Docker, CI/CD) without getting lost in unfamiliar business rules.
+
+The goal was not to build a toy CRUD app, but to implement the same invariants a production payment ledger enforces — balanced entries, idempotent writes, immutable audit trails — using modern tooling.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -66,9 +74,29 @@ accounts 1 ──── N entries N ──── 1 transactions
 
 **Invariant**: `SUM(debit amounts) = SUM(credit amounts)` per transaction.
 
-Application layering: `api/` → `services/` → `models/` (3-layer, services use `AsyncSession` directly).
+Application layering: `api/` → `services/` → `repositories/` → `models/` (4-layer).
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full ER diagrams and design decisions.
+
+## Design Decisions
+
+Key architectural choices are recorded as ADRs in [`docs/adr/`](docs/adr/). Here are the highlights:
+
+### Money as integers, not floats
+
+All monetary amounts are stored as `BIGINT` in the currency's smallest unit (e.g., `1000` = €10.00). Integer arithmetic eliminates IEEE 754 rounding errors entirely. This is the same convention Stripe, Mollie, and Adyen use in their public APIs. → [ADR-004](docs/adr/004-money-as-bigint-minor-units.md)
+
+### Redis-backed idempotency keys
+
+`POST /transactions` accepts an `Idempotency-Key` header. The key is stored in Redis with a 24-hour TTL. If a client retries the same request, the API returns `409 Conflict` instead of creating a duplicate transaction. This pattern is critical for payment systems where network failures can trigger retries. → [ADR-001](docs/adr/001-redis-for-idempotency-key.md)
+
+### Immutable ledger with status lifecycle
+
+Transactions are never updated or deleted. Instead, they follow a `PENDING → POSTED → VOIDED` state machine. Voiding a transaction creates a new reversal transaction with opposite entry signs, preserving the full audit trail. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
+
+### JWT claims eliminate per-request DB lookups
+
+User role and active status are embedded in the JWT payload at login. Authenticated requests are resolved entirely from the token — no database query required. This reduces per-request latency from ~65 ms to < 10 ms, at the cost of a 30-minute revocation delay (acceptable for this deployment). → [ADR-006](docs/adr/006-jwt-claims-no-db-per-request.md)
 
 ## Getting Started
 
@@ -156,3 +184,13 @@ Every push and pull request triggers the following pipeline via GitHub Actions:
 | Test | pytest + testcontainers | Integration tests with real PostgreSQL |
 | Security | pip-audit | Dependency vulnerability scan |
 | Build | Docker | Image build verification |
+
+## What I'd Do Differently
+
+Looking back on this project, here is what I would change if I were starting over:
+
+- **Adopt event sourcing for the ledger.** The current status lifecycle (`POSTED → VOIDED`) works, but an append-only event log would capture the full history of every state transition — useful for debugging, compliance, and replaying ledger state.
+
+- **Include load tests in CI.** Locust results currently live in `docs/loadtest/` as static snapshots. Running a baseline load test on every PR would catch performance regressions before they reach production.
+
+- **Use short-lived tokens with silent refresh.** Embedding role/active status in JWTs trades per-request latency for a 30-minute revocation window. A 5-minute token lifetime with a refresh endpoint would tighten that window without reintroducing DB lookups on every request.
