@@ -73,7 +73,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO users (id, email, hashed_password, role, is_active, created_at)"
-                    " VALUES (:id, :email, :hashed_password, 'admin', :is_active, :created_at)"
+                    " VALUES (:id, :email, :hashed_password, 'ADMIN', :is_active, :created_at)"
                 ),
                 {
                     "id": str(DEMO_USER_ID),
@@ -115,8 +115,8 @@ async def seed() -> None:
 
         # 3. Accounts (Cash + Revenue)
         for acct_id, code, name, acct_type in [
-            (CASH_ACCOUNT_ID, "1000", "Cash", "asset"),
-            (REVENUE_ACCOUNT_ID, "4000", "Sales Revenue", "revenue"),
+            (CASH_ACCOUNT_ID, "1000", "Cash", "ASSET"),
+            (REVENUE_ACCOUNT_ID, "4000", "Sales Revenue", "REVENUE"),
         ]:
             existing = (
                 await conn.execute(
@@ -155,7 +155,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO transactions (id, description, transaction_date, status, posted_at, created_at)"
-                    " VALUES (:id, :description, :transaction_date, 'posted', :posted_at, :created_at)"
+                    " VALUES (:id, :description, :transaction_date, 'POSTED', :posted_at, :created_at)"
                 ),
                 {
                     "id": str(TRANSACTION_ID),
@@ -168,7 +168,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
-                    " VALUES (:id, :transaction_id, :account_id, 'debit', :amount, :currency, :converted_amount_usd)"
+                    " VALUES (:id, :transaction_id, :account_id, 'DEBIT', :amount, :currency, :converted_amount_usd)"
                 ),
                 {
                     "id": str(ENTRY_DEBIT_ID),
@@ -182,7 +182,7 @@ async def seed() -> None:
             await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
-                    " VALUES (:id, :transaction_id, :account_id, 'credit', :amount, :currency, :converted_amount_usd)"
+                    " VALUES (:id, :transaction_id, :account_id, 'CREDIT', :amount, :currency, :converted_amount_usd)"
                 ),
                 {
                     "id": str(ENTRY_CREDIT_ID),
