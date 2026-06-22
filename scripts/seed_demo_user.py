@@ -1,7 +1,7 @@
 """Seed demo user and sample data for Swagger UI demonstration.
 
 Usage (on Fly.io):
-    fly ssh console -C "cd /app && python -m scripts.seed_demo_user"
+    fly ssh console -C "sh -c 'cd /app && uv run --no-sync python -m scripts.seed_demo_user'"
 
 Usage (local):
     uv run python -m scripts.seed_demo_user
@@ -9,12 +9,14 @@ Usage (local):
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import UTC, date, datetime
 
 import bcrypt
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 DEMO_EMAIL = "demo@example.com"
 DEMO_PASSWORD = "demo1234"
@@ -36,25 +38,25 @@ def _get_database_url() -> str:
     if not url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
-    if "+asyncpg" in url:
-        url = url.replace("+asyncpg", "", 1)
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
     return url
 
 
-def seed() -> None:
-    engine = create_engine(_get_database_url())
+async def seed() -> None:
+    engine = create_async_engine(_get_database_url())
     now = datetime.now(UTC)
     hashed = _hash_password(DEMO_PASSWORD)
 
-    with engine.begin() as conn:
+    async with engine.begin() as conn:
         # 1. Demo user (admin role)
-        existing = conn.execute(
+        existing = (await conn.execute(
             text("SELECT id FROM users WHERE email = :email"),
             {"email": DEMO_EMAIL},
-        ).fetchone()
+        )).fetchone()
         if existing is None:
-            conn.execute(
+            await conn.execute(
                 text(
                     "INSERT INTO users (id, email, hashed_password, role, is_active, created_at)"
                     " VALUES (:id, :email, :hashed_password, :role, :is_active, :created_at)"
@@ -73,12 +75,12 @@ def seed() -> None:
             print(f"Demo user already exists: {DEMO_EMAIL}")
 
         # 2. Currency (USD)
-        existing = conn.execute(
+        existing = (await conn.execute(
             text("SELECT code FROM currencies WHERE code = :code"),
             {"code": "USD"},
-        ).fetchone()
+        )).fetchone()
         if existing is None:
-            conn.execute(
+            await conn.execute(
                 text(
                     "INSERT INTO currencies (id, code, name, decimal_places, is_active, created_at)"
                     " VALUES (:id, :code, :name, :decimal_places, :is_active, :created_at)"
@@ -101,12 +103,12 @@ def seed() -> None:
             (CASH_ACCOUNT_ID, "1000", "Cash", "asset"),
             (REVENUE_ACCOUNT_ID, "4000", "Sales Revenue", "revenue"),
         ]:
-            existing = conn.execute(
+            existing = (await conn.execute(
                 text("SELECT id FROM accounts WHERE code = :code"),
                 {"code": code},
-            ).fetchone()
+            )).fetchone()
             if existing is None:
-                conn.execute(
+                await conn.execute(
                     text(
                         "INSERT INTO accounts (id, code, name, account_type, currency, is_active, created_at, updated_at)"
                         " VALUES (:id, :code, :name, :account_type, :currency, :is_active, :created_at, :updated_at)"
@@ -127,12 +129,12 @@ def seed() -> None:
                 print(f"Account {code} already exists")
 
         # 4. Transaction + Entries (double-entry: debit Cash, credit Revenue)
-        existing = conn.execute(
+        existing = (await conn.execute(
             text("SELECT id FROM transactions WHERE id = :id"),
             {"id": str(TRANSACTION_ID)},
-        ).fetchone()
+        )).fetchone()
         if existing is None:
-            conn.execute(
+            await conn.execute(
                 text(
                     "INSERT INTO transactions (id, description, transaction_date, status, posted_at, created_at)"
                     " VALUES (:id, :description, :transaction_date, :status, :posted_at, :created_at)"
@@ -146,7 +148,7 @@ def seed() -> None:
                     "created_at": now,
                 },
             )
-            conn.execute(
+            await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
                     " VALUES (:id, :transaction_id, :account_id, :direction, :amount, :currency, :converted_amount_usd)"
@@ -161,7 +163,7 @@ def seed() -> None:
                     "converted_amount_usd": 5000,
                 },
             )
-            conn.execute(
+            await conn.execute(
                 text(
                     "INSERT INTO entries (id, transaction_id, account_id, direction, amount, currency, converted_amount_usd)"
                     " VALUES (:id, :transaction_id, :account_id, :direction, :amount, :currency, :converted_amount_usd)"
@@ -185,4 +187,4 @@ def seed() -> None:
 
 
 if __name__ == "__main__":
-    seed()
+    asyncio.run(seed())
