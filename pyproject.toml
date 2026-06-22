@@ -3,7 +3,7 @@ name = "payment-ledger-api"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi[standard]>=0.115",
+  "fastapi[standard]>=0.138.0",
   "sqlalchemy[asyncio]>=2.0.51",
   "asyncpg>=0.29",
   "alembic>=1.13",
