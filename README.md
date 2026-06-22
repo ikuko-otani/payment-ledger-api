@@ -28,6 +28,14 @@ Built as a portfolio project to demonstrate production-level backend engineering
 - **CI pipeline** — lint, type check (`mypy --strict`), test, security audit, Docker build
 - **Deployed on Fly.io** with managed PostgreSQL and Upstash Redis
 
+## Why I Built This
+
+I spent 11 years building and maintaining accounting and ERP systems — mostly in PHP and Oracle PL/SQL. Ledger integrity, balanced transactions, and month-end close procedures were everyday concerns.
+
+When I decided to transition into modern backend engineering, I chose a domain I already understood deeply: double-entry bookkeeping. This let me focus on learning the new stack (async Python, SQLAlchemy 2.0, Redis, Docker, CI/CD) without getting lost in unfamiliar business rules.
+
+The goal was not to build a toy CRUD app, but to implement the same invariants a production payment ledger enforces — balanced entries, idempotent writes, immutable audit trails — using modern tooling.
+
 ## Tech Stack
 
 | Layer | Technology |
