@@ -41,6 +41,11 @@ def _get_database_url() -> str:
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    # asyncpg does not accept sslmode — strip it
+    if "?" in url:
+        base, qs = url.split("?", 1)
+        params = [p for p in qs.split("&") if not p.startswith("sslmode=")]
+        url = f"{base}?{'&'.join(params)}" if params else base
     return url
 
 
