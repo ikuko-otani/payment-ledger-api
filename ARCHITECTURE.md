@@ -117,6 +117,28 @@ write transaction, enables TTL-based expiry, and clears the key on failure so
 retries are not blocked by a previously failed request. The PostgreSQL UNIQUE
 constraint is retained as a safety net.
 
+**Evolved in S7 — request fingerprinting and response replay**:
+
+The implementation now follows a two-phase Redis state machine with
+Stripe-style semantics (`app/dependencies/idempotency.py`):
+
+1. **Phase 1 (new request)**: `SET NX` stores a JSON payload containing a
+   SHA-256 fingerprint of the request body and `"status": "pending"`.
+2. **Phase 2 (on success)**: the pending marker is overwritten with the
+   serialised response body, so future duplicates replay the original `200`
+   response instead of returning `409 Conflict`.
+3. **Fingerprint mismatch**: if the same idempotency key is reused with a
+   different request body, the server returns `422 Unprocessable Entity` —
+   preventing silent request substitution.
+4. **Failure cleanup**: if the request raises an exception after the key is
+   acquired, the key is deleted so the client can retry with the same key.
+
+**Consequence**: the idempotency layer is no longer a simple duplicate gate;
+it is a correctness mechanism that guarantees *exactly-once semantics* for
+successful requests and safe retry for failed ones. The trade-off is
+increased Redis storage per key (response body cached alongside the
+fingerprint) and slightly more complex error-handling logic.
+
 ---
 
 ### Immutable transaction log
