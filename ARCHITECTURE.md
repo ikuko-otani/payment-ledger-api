@@ -180,14 +180,13 @@ docker compose up          # PostgreSQL + API on :8000
 
 ---
 
-## 7. Authentication & Authorization Design
+## 6. Authentication & Authorization Design
 
-> Added in S3 after implementing JWT-based auth, RBAC role enforcement, and
-> the `get_current_user` dependency. These decisions explain **what was chosen
-> and what was deliberately rejected**, so they can serve as interview answers
-> without modification.
+> Covers JWT-based auth, RBAC role enforcement, and the `get_current_user`
+> dependency. Each subsection explains **what was chosen and what was
+> deliberately rejected**.
 
-### 7.1 Why JWT over server-side sessions
+### 6.1 Why JWT over server-side sessions
 
 **Decision**: Issue a signed JWT (HS256) on successful login. Every subsequent
 request carries the token in the `Authorization: Bearer <token>` header; the
@@ -218,7 +217,7 @@ instances.
 - *Payload size*: every request carries the full token. For APIs with very
   large claims sets, this adds per-request overhead vs. a session ID cookie.
 
-### 7.2 Why RBAC over ABAC
+### 6.2 Why RBAC over ABAC
 
 **Decision**: Implement Role-Based Access Control with two roles: `admin`
 (full read/write) and `auditor` (read-only). The role is stored on the
@@ -243,7 +242,7 @@ where currency=EUR during business hours").
   to ABAC at that point is still possible without rewriting the existing RBAC
   checks.
 
-### 7.3 Why native PostgreSQL enum for the `role` column
+### 6.3 Why native PostgreSQL enum for the `role` column
 
 **Decision**: Define `role` as a PostgreSQL native `ENUM` type (`CREATE TYPE
 user_role AS ENUM ('admin', 'auditor')`), mapped to a Python `enum.Enum`
@@ -271,7 +270,7 @@ via SQLAlchemy's `Enum(UserRole, native_enum=True)`.
   deployed together. This coupling is acceptable at two roles; with 10+ roles
   a VARCHAR approach avoids migration churn.
 
-### 7.4 Why uniform error messages for auth failures
+### 6.4 Why uniform error messages for auth failures
 
 **Decision**: All authentication and authorization failures return a generic
 `401 Unauthorized` or `403 Forbidden` with a fixed message
@@ -299,7 +298,7 @@ attackers.
   frustrating. Mitigation: detailed error codes in server-side structured
   logs (structlog) visible to operators but not returned to clients.
 
-### 7.5 Why embed role/is_active in the JWT payload (no per-request DB query)
+### 6.5 Why embed role/is_active in the JWT payload (no per-request DB query)
 
 **Decision**: At login (`POST /api/v1/auth/login`), embed `role` and
 `is_active` as additional claims in the JWT payload alongside `sub`
@@ -337,7 +336,7 @@ after Redis caching optimisations in S7-4.
 
 ---
 
-## 8. Multi-Currency Design (S4)
+## 7. Multi-Currency Design
 
 ### Rounding policy: ROUND_HALF_UP for currency conversion
 
@@ -497,14 +496,14 @@ requirement.
 
 ---
 
-## 9. Observability & Caching Design (S5)
+## 8. Observability & Caching Design
 
-> Added in S5 after implementing structlog (JSON logging), OpenTelemetry +
-> Jaeger (distributed tracing), and a Redis-backed Cache-Aside layer for
-> `GET /accounts/{id}/balance`. As with Section 7, these are written as
-> interview-ready ADR entries: decision, rationale, and trade-offs.
+> Covers structlog (JSON logging), OpenTelemetry + Jaeger (distributed tracing),
+> and a Redis-backed Cache-Aside layer for `GET /accounts/{id}/balance`.
+> Each subsection is written as an interview-ready entry: decision, rationale,
+> and trade-offs.
 
-### 9.1 Why async SQLAlchemy over sync
+### 8.1 Why async SQLAlchemy over sync
 
 **Decision**: Use SQLAlchemy 2.0's async engine with the `asyncpg` driver and
 `AsyncSession` throughout the service layer (`app/services/*.py`), rather than
@@ -543,7 +542,7 @@ the classic synchronous `Session` + `psycopg2` combination.
   mature sync SQLAlchemy ecosystem (e.g. some Alembic autogenerate workflows
   still assume a sync engine, requiring a small sync/async bridge).
 
-### 9.2 Observability stack (structlog + OpenTelemetry + Jaeger)
+### 8.2 Observability stack (structlog + OpenTelemetry + Jaeger)
 
 **Decision**: Combine three tools, each responsible for one observability
 pillar: **structlog** for JSON-structured application logs, **OpenTelemetry**
@@ -591,7 +590,7 @@ and binds it into every structlog entry via `structlog.contextvars`.
   logs and traces alone cannot answer "is p99 latency degrading over the last
   hour?" without manual aggregation.
 
-### 9.3 Caching strategy (Cache-Aside for account balances)
+### 8.3 Caching strategy (Cache-Aside for account balances)
 
 **Decision**: Implement the **Cache-Aside** (lazy-loading) pattern for
 `GET /accounts/{id}/balance`. The service checks Redis first
@@ -640,7 +639,7 @@ that transaction (see `app/repositories/account_repository.py`, `app/core/redis.
   traffic this is negligible; a production hardening pass would add a
   short-lived lock or "request coalescing" around the cache-fill step.
 
-### 9.4 N+1 prevention strategy (selectinload / contains_eager)
+### 8.4 N+1 prevention strategy (selectinload / contains_eager)
 
 **Decision**: Apply explicit eager-loading strategies to every repository
 query that returns entities with relationships:
@@ -681,7 +680,7 @@ parent row. In async mode this is not just slow — it raises
 
 ---
 
-## 6. What I Would Add in Production
+## 9. What I Would Add in Production
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out
 - **Row-level security** in PostgreSQL for multi-tenant isolation
