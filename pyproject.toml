@@ -23,7 +23,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "pytest>=8.2",
+  "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
   "httpx>=0.27",
   "testcontainers[postgres]>=4.8",
