@@ -184,3 +184,13 @@ Every push and pull request triggers the following pipeline via GitHub Actions:
 | Test | pytest + testcontainers | Integration tests with real PostgreSQL |
 | Security | pip-audit | Dependency vulnerability scan |
 | Build | Docker | Image build verification |
+
+## What I'd Do Differently
+
+Looking back on this project, here is what I would change if I were starting over:
+
+- **Adopt event sourcing for the ledger.** The current status lifecycle (`POSTED → VOIDED`) works, but an append-only event log would capture the full history of every state transition — useful for debugging, compliance, and replaying ledger state.
+
+- **Include load tests in CI.** Locust results currently live in `docs/loadtest/` as static snapshots. Running a baseline load test on every PR would catch performance regressions before they reach production.
+
+- **Use short-lived tokens with silent refresh.** Embedding role/active status in JWTs trades per-request latency for a 30-minute revocation window. A 5-minute token lifetime with a refresh endpoint would tighten that window without reintroducing DB lookups on every request.
