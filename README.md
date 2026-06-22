@@ -74,9 +74,29 @@ accounts 1 ──── N entries N ──── 1 transactions
 
 **Invariant**: `SUM(debit amounts) = SUM(credit amounts)` per transaction.
 
-Application layering: `api/` → `services/` → `models/` (3-layer, services use `AsyncSession` directly).
+Application layering: `api/` → `services/` → `repositories/` → `models/` (4-layer).
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full ER diagrams and design decisions.
+
+## Design Decisions
+
+Key architectural choices are recorded as ADRs in [`docs/adr/`](docs/adr/). Here are the highlights:
+
+### Money as integers, not floats
+
+All monetary amounts are stored as `BIGINT` in the currency's smallest unit (e.g., `1000` = €10.00). Integer arithmetic eliminates IEEE 754 rounding errors entirely. This is the same convention Stripe, Mollie, and Adyen use in their public APIs. → [ADR-004](docs/adr/004-money-as-bigint-minor-units.md)
+
+### Redis-backed idempotency keys
+
+`POST /transactions` accepts an `Idempotency-Key` header. The key is stored in Redis with a 24-hour TTL. If a client retries the same request, the API returns `409 Conflict` instead of creating a duplicate transaction. This pattern is critical for payment systems where network failures can trigger retries. → [ADR-001](docs/adr/001-redis-for-idempotency-key.md)
+
+### Immutable ledger with status lifecycle
+
+Transactions are never updated or deleted. Instead, they follow a `PENDING → POSTED → VOIDED` state machine. Voiding a transaction creates a new reversal transaction with opposite entry signs, preserving the full audit trail. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
+
+### JWT claims eliminate per-request DB lookups
+
+User role and active status are embedded in the JWT payload at login. Authenticated requests are resolved entirely from the token — no database query required. This reduces per-request latency from ~65 ms to < 10 ms, at the cost of a 30-minute revocation delay (acceptable for this deployment). → [ADR-006](docs/adr/006-jwt-claims-no-db-per-request.md)
 
 ## Getting Started
 
