@@ -56,10 +56,12 @@ async def seed() -> None:
 
     async with engine.begin() as conn:
         # 1. Demo user (admin role)
-        existing = (await conn.execute(
-            text("SELECT id FROM users WHERE email = :email"),
-            {"email": DEMO_EMAIL},
-        )).fetchone()
+        existing = (
+            await conn.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": DEMO_EMAIL},
+            )
+        ).fetchone()
         if existing is None:
             await conn.execute(
                 text(
@@ -80,10 +82,12 @@ async def seed() -> None:
             print(f"Demo user already exists: {DEMO_EMAIL}")
 
         # 2. Currency (USD)
-        existing = (await conn.execute(
-            text("SELECT code FROM currencies WHERE code = :code"),
-            {"code": "USD"},
-        )).fetchone()
+        existing = (
+            await conn.execute(
+                text("SELECT code FROM currencies WHERE code = :code"),
+                {"code": "USD"},
+            )
+        ).fetchone()
         if existing is None:
             await conn.execute(
                 text(
@@ -108,10 +112,12 @@ async def seed() -> None:
             (CASH_ACCOUNT_ID, "1000", "Cash", "asset"),
             (REVENUE_ACCOUNT_ID, "4000", "Sales Revenue", "revenue"),
         ]:
-            existing = (await conn.execute(
-                text("SELECT id FROM accounts WHERE code = :code"),
-                {"code": code},
-            )).fetchone()
+            existing = (
+                await conn.execute(
+                    text("SELECT id FROM accounts WHERE code = :code"),
+                    {"code": code},
+                )
+            ).fetchone()
             if existing is None:
                 await conn.execute(
                     text(
@@ -134,10 +140,12 @@ async def seed() -> None:
                 print(f"Account {code} already exists")
 
         # 4. Transaction + Entries (double-entry: debit Cash, credit Revenue)
-        existing = (await conn.execute(
-            text("SELECT id FROM transactions WHERE id = :id"),
-            {"id": str(TRANSACTION_ID)},
-        )).fetchone()
+        existing = (
+            await conn.execute(
+                text("SELECT id FROM transactions WHERE id = :id"),
+                {"id": str(TRANSACTION_ID)},
+            )
+        ).fetchone()
         if existing is None:
             await conn.execute(
                 text(
