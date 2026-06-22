@@ -328,7 +328,7 @@ async def admin_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as tmp:
         resp = await tmp.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": password},
+            data={"username": email, "password": password},
         )
     token: str = resp.json()["access_token"]
 
@@ -349,7 +349,7 @@ async def auditor_token(engine: AsyncEngine) -> AsyncGenerator[str, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as tmp:
         resp = await tmp.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": password},
+            data={"username": email, "password": password},
         )
     token: str = resp.json()["access_token"]
 
@@ -389,7 +389,7 @@ async def authenticated_client(
         )
         resp = await client.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": password},
+            data={"username": email, "password": password},
         )
         token: str = resp.json()["access_token"]
         client.headers.update({"Authorization": f"Bearer {token}"})
@@ -421,7 +421,7 @@ async def auditor_client(
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": password},
+            data={"username": email, "password": password},
         )
         token: str = resp.json()["access_token"]
         client.headers.update({"Authorization": f"Bearer {token}"})
