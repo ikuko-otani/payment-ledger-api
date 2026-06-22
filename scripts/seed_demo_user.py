@@ -33,7 +33,7 @@ def _hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def _get_database_url() -> str:
+def _parse_database_url() -> tuple[str, dict[str, object]]:
     url = os.environ.get("DATABASE_URL", "")
     if not url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
@@ -41,16 +41,23 @@ def _get_database_url() -> str:
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    # asyncpg does not accept sslmode — strip it
+    connect_args: dict[str, object] = {}
     if "?" in url:
         base, qs = url.split("?", 1)
-        params = [p for p in qs.split("&") if not p.startswith("sslmode=")]
-        url = f"{base}?{'&'.join(params)}" if params else base
-    return url
+        remaining = []
+        for p in qs.split("&"):
+            if p.startswith("sslmode="):
+                if p == "sslmode=disable":
+                    connect_args["ssl"] = False
+            else:
+                remaining.append(p)
+        url = f"{base}?{'&'.join(remaining)}" if remaining else base
+    return url, connect_args
 
 
 async def seed() -> None:
-    engine = create_async_engine(_get_database_url())
+    url, connect_args = _parse_database_url()
+    engine = create_async_engine(url, connect_args=connect_args)
     now = datetime.now(UTC)
     hashed = _hash_password(DEMO_PASSWORD)
 
