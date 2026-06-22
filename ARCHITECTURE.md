@@ -640,6 +640,45 @@ that transaction (see `app/repositories/account_repository.py`, `app/core/redis.
   traffic this is negligible; a production hardening pass would add a
   short-lived lock or "request coalescing" around the cache-fill step.
 
+### 9.4 N+1 prevention strategy (selectinload / contains_eager)
+
+**Decision**: Apply explicit eager-loading strategies to every repository
+query that returns entities with relationships:
+
+| Repository | Strategy | Why this one |
+|------------|----------|-------------|
+| `TransactionRepository.save()` | `selectinload(Transaction.entries)` | After flush, reload the transaction with all its entries in a single additional `SELECT … WHERE transaction_id IN (?)` query |
+| `TransactionRepository.list_all()` | `selectinload(Transaction.entries)` | Batch-load entries for all transactions returned by the list query |
+| `LedgerRepository.list_entries()` | `contains_eager(Entry.transaction)` | The query already `JOIN`s `transactions` for filtering/ordering; `contains_eager` tells SQLAlchemy to populate `Entry.transaction` from the joined row instead of issuing a separate query |
+
+**What was rejected**: SQLAlchemy's default lazy loading, where accessing
+`transaction.entries` or `entry.transaction` triggers an implicit query per
+parent row. In async mode this is not just slow — it raises
+`MissingGreenlet` unless the access happens inside an awaited context
+(see `docs/troubleshooting/sqlalchemy-missing-greenlet-lazy-load.md`).
+
+**Rationale**:
+- *Predictable query count*: `selectinload` always produces exactly 2
+  queries (one for parents, one `IN`-query for children) regardless of
+  result set size. Without it, listing 50 transactions would fire 1 + 50
+  queries.
+- *`contains_eager` for pre-joined data*: when the query already contains
+  a `JOIN` (e.g. `Entry.join(Transaction)` for date filtering), a second
+  `selectinload` would issue a redundant query. `contains_eager` reuses
+  the joined columns at zero additional cost.
+- *Async safety*: explicit eager loading eliminates all implicit lazy-load
+  paths, preventing `MissingGreenlet` errors at runtime.
+
+**Trade-off**:
+- Eager loading fetches related data even when the caller does not access
+  it. For the current API (transactions always return their entries, ledger
+  entries always include their transaction header), this is always needed.
+  If a future endpoint needed transactions without entries, a separate
+  repository method with no eager loading would be appropriate.
+- Query count assertions (`event.listen("before_cursor_execute")` counter)
+  are not yet in place; adding them would catch regressions if a future
+  contributor removes an `options()` call.
+
 ---
 
 ## 6. What I Would Add in Production
