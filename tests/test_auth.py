@@ -21,7 +21,7 @@ async def test_login_success_returns_200_with_jwt(async_client: AsyncClient) -> 
     await _register_user(async_client)
     response = await async_client.post(
         "/api/v1/auth/login",
-        json={"email": "auth_user@example.com", "password": "secret123"},
+        data={"username": "auth_user@example.com", "password": "secret123"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -34,7 +34,7 @@ async def test_login_wrong_password_returns_401(async_client: AsyncClient) -> No
     await _register_user(async_client)
     response = await async_client.post(
         "/api/v1/auth/login",
-        json={"email": "auth_user@example.com", "password": "wrongpassword"},
+        data={"username": "auth_user@example.com", "password": "wrongpassword"},
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect email or password"
@@ -44,7 +44,7 @@ async def test_login_wrong_password_returns_401(async_client: AsyncClient) -> No
 async def test_login_unknown_email_returns_401(async_client: AsyncClient) -> None:
     response = await async_client.post(
         "/api/v1/auth/login",
-        json={"email": "nobody@example.com", "password": "secret123"},
+        data={"username": "nobody@example.com", "password": "secret123"},
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect email or password"
