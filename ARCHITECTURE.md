@@ -160,7 +160,7 @@ simplifies CDC (Change Data Capture) for downstream analytics.
 
 | Layer            | Technology                              |
 |------------------|-----------------------------------------|
-| API              | FastAPI 0.111 (async)                   |
+| API              | FastAPI (async)                         |
 | Validation       | Pydantic v2                             |
 | ORM              | SQLAlchemy 2.0 (async + asyncpg driver) |
 | Migrations       | Alembic                                 |
