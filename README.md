@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ikuko-otani/payment-ledger-api/graph/badge.svg)](https://codecov.io/gh/ikuko-otani/payment-ledger-api)
-![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
@@ -24,7 +24,7 @@ Built as a portfolio project to demonstrate production-level backend engineering
 - **JWT authentication** with bcrypt password hashing
 - **Distributed tracing** with OpenTelemetry + Jaeger
 - **Async-first architecture** — SQLAlchemy 2.0 async sessions with asyncpg
-- **94% test coverage** with testcontainers (real PostgreSQL, no mocks)
+- **96% test coverage** with testcontainers (real PostgreSQL, no mocks)
 - **CI pipeline** — lint, type check (`mypy --strict`), test, security audit, Docker build
 - **Deployed on Fly.io** with managed PostgreSQL and Upstash Redis
 
