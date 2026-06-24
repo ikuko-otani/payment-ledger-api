@@ -55,9 +55,7 @@ created_at      TIMESTAMPTZ
 transactions
 ─────────────────────────────
 id               UUID  PK
-idempotency_key  TEXT  UNIQUE
 description      TEXT
-currency         CHAR(3)
 status           TEXT  -- PENDING | POSTED | VOIDED
 posted_at        TIMESTAMPTZ
 created_at       TIMESTAMPTZ
@@ -112,13 +110,16 @@ present, and raises `check_violation` (SQLSTATE 23514) if debits ≠ credits.
 PostgreSQL's unique index provided strong atomicity with zero additional
 infrastructure.
 
-**Updated in S2-3**: Migrated to Redis-backed idempotency with a 24 h TTL.
+**Updated in S2-3**: Migrated to Redis-backed idempotency with a 24 h TTL
+and removed the `idempotency_key` column from `transactions`.
 See `docs/adr/001-redis-for-idempotency-key.md` for the full rationale.
 
 **Summary**: Redis allows the idempotency check to be decoupled from the DB
 write transaction, enables TTL-based expiry, and clears the key on failure so
-retries are not blocked by a previously failed request. The PostgreSQL UNIQUE
-constraint is retained as a safety net.
+retries are not blocked by a previously failed request. Redis is a hard
+dependency on the write path — if unavailable, `POST /transactions` returns
+500 rather than silently skipping the check, because a skipped idempotency
+check could create duplicate transactions (correctness over availability).
 
 **Evolved in S7 — request fingerprinting and response replay**:
 
