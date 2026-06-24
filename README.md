@@ -30,7 +30,7 @@ Built as a portfolio project to demonstrate production-level backend engineering
 
 ## Why I Built This
 
-I spent 11 years building and maintaining accounting and ERP systems — mostly in PHP and Oracle PL/SQL. Ledger integrity, balanced transactions, and month-end close procedures were everyday concerns.
+I spent over a decade building enterprise systems — mostly in PHP and Oracle PL/SQL. Financial accounting, order management, and manufacturing systems were a recurring theme, and ledger integrity was an everyday concern.
 
 When I decided to transition into modern backend engineering, I chose a domain I already understood deeply: double-entry bookkeeping. This let me focus on learning the new stack (async Python, SQLAlchemy 2.0, Redis, Docker, CI/CD) without getting lost in unfamiliar business rules.
 
