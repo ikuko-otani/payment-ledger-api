@@ -92,14 +92,17 @@ is looked up from a small reference table or hardcoded per ISO 4217.
 
 ### Double-entry balance enforced at the application layer (primary) + DB constraint trigger (safety net)
 
-**Decision**: FastAPI service layer validates `SUM(DEBIT entries) == SUM(CREDIT entries)`
-before persisting. A PostgreSQL `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED`
-acts as a safety net checked at `COMMIT`.
+**Decision**: Double-entry balance is enforced at two layers. The FastAPI service
+layer validates `SUM(DEBIT entries) == SUM(CREDIT entries)` before persisting,
+providing early user-friendly error messages. A PostgreSQL
+`CONSTRAINT TRIGGER trg_check_entries_balance … DEFERRABLE INITIALLY DEFERRED`
+acts as a safety net checked at `COMMIT`, catching any write that bypasses the
+service layer (e.g. direct SQL, migration scripts).
 
 **Rationale**: A plain `CHECK` constraint operates per-row and cannot compare
-aggregate values across multiple `entries` rows. An application-layer check
-provides early, user-friendly error messages. The deferred trigger catches any
-bug that bypasses the service layer (e.g. direct DB writes, migration scripts).
+aggregate values across multiple `entries` rows. The deferred constraint trigger
+fires once per row at `COMMIT` time, when all entries for the transaction are
+present, and raises `check_violation` (SQLSTATE 23514) if debits ≠ credits.
 
 ---
 
