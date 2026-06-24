@@ -92,7 +92,7 @@ All monetary amounts are stored as `BIGINT` in the currency's smallest unit (e.g
 
 ### Immutable ledger with status lifecycle
 
-Transactions are never updated or deleted. Instead, they follow a `PENDING → POSTED → VOIDED` state machine. Voiding a transaction creates a new reversal transaction with opposite entry signs, preserving the full audit trail. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
+Transactions are never updated or deleted. The status field models a `PENDING → POSTED → VOIDED` lifecycle defined in [ADR-005](docs/adr/005-transaction-status-lifecycle.md). Currently only `POSTED` is used at write time; the `VOIDED` transition (via a dedicated reversal endpoint) is a planned extension. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
 
 ### JWT claims eliminate per-request DB lookups
 
@@ -186,7 +186,7 @@ Every push and pull request triggers the following pipeline via GitHub Actions:
 
 Looking back on this project, here is what I would change if I were starting over:
 
-- **Adopt event sourcing for the ledger.** The current status lifecycle (`POSTED → VOIDED`) works, but an append-only event log would capture the full history of every state transition — useful for debugging, compliance, and replaying ledger state.
+-  **Adopt event sourcing for the ledger.** The current design models a `POSTED → VOIDED` lifecycle, but voiding is not yet wired to an endpoint. An append-only event log would capture the full history of every state transition — useful for debugging, compliance, and replaying ledger state.
 
 - **Include load tests in CI.** Locust results currently live in `docs/loadtest/` as static snapshots. Running a baseline load test on every PR would catch performance regressions before they reach production.
 
