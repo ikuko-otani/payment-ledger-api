@@ -186,7 +186,7 @@ Every push and pull request triggers the following pipeline via GitHub Actions:
 
 Looking back on this project, here is what I would change if I were starting over:
 
--  **Adopt event sourcing for the ledger.** The current design models a `POSTED → VOIDED` lifecycle, but voiding is not yet wired to an endpoint. An append-only event log would capture the full history of every state transition — useful for debugging, compliance, and replaying ledger state.
+- **Adopt event sourcing for the ledger.** The current design models a `POSTED → VOIDED` lifecycle, but voiding is not yet wired to an endpoint. An append-only event log would capture the full history of every state transition — useful for debugging, compliance, and replaying ledger state.
 
 - **Include load tests in CI.** Locust results currently live in `docs/loadtest/` as static snapshots. Running a baseline load test on every PR would catch performance regressions before they reach production.
 
