@@ -1,9 +1,9 @@
 # ARCHITECTURE.md — payment-ledger-api
 
-> **payment-ledger-api** is a production-grade double-entry bookkeeping REST API
+> **payment-ledger-api** is a double-entry bookkeeping REST API
 > built with FastAPI, SQLAlchemy 2.0 (async), PostgreSQL, and Alembic.
-> It demonstrates the core ledger patterns used inside payment processors such as
-> Mollie, Stripe, and Revolut.
+> It enforces the same ledger invariants and idempotency conventions used inside
+> payment processors such as Mollie, Stripe, and Revolut.
 
 ---
 

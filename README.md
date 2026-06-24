@@ -1,6 +1,6 @@
 # payment-ledger-api
 
-> Production-grade double-entry bookkeeping REST API demonstrating the core ledger patterns used inside payment processors such as Stripe, Mollie, and Revolut.
+> Double-entry bookkeeping REST API that enforces the same ledger invariants and idempotency conventions used inside payment processors such as Stripe, Mollie, and Revolut.
 
 [![CI](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ikuko-otani/payment-ledger-api/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ikuko-otani/payment-ledger-api/graph/badge.svg)](https://codecov.io/gh/ikuko-otani/payment-ledger-api)
