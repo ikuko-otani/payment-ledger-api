@@ -164,9 +164,9 @@ Two bottlenecks were identified and fixed during load testing:
 | Config | Req/s | 0% errors | vs. baseline |
 |--------|-------|-----------|--------------|
 | 1 worker (dev) | 2.43 | Yes | — |
-| 4 workers | 17.30 | Yes | **7× throughput** |
+| 4 workers | 14.40 | Yes | **6× throughput** |
 
-Scaling to 4 Uvicorn workers after these fixes raised throughput ~7× and cut p99 by more than half.
+Scaling to 4 Uvicorn workers after these fixes raised throughput ~6× and cut p99 by more than half.
 
 Raw results: [`docs/loadtest/`](docs/loadtest/)
 
