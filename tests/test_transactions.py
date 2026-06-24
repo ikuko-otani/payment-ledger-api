@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from app.core.exceptions import ValidationError
 from app.models.account import Account, AccountType
 from app.models.currency import Currency
-from app.models.entry import Direction
+from app.models.entry import Direction, Entry
 from app.models.exchange_rate import ExchangeRate
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionStatus
 from app.models.user import User, UserRole
 from app.repositories.account_repository import SQLAlchemyAccountRepository
 from app.repositories.audit_repository import SQLAlchemyAuditRepository
@@ -775,3 +775,56 @@ async def test_no_exchange_rate_on_or_before_date_returns_422(
 
     assert exc_info.value.status_code == 422
     assert "on or before" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_db_trigger_rejects_unbalanced_entries_on_commit(
+    db_session: AsyncSession,
+) -> None:
+    """Defense-in-depth: DB constraint trigger rejects unbalanced entries
+    even when the application-layer validation is bypassed (e.g. direct SQL).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    debit_acct = await _create_account(
+        db_session, "Cash-Trigger", AccountType.ASSET, code="1200"
+    )
+    credit_acct = await _create_account(
+        db_session, "Revenue-Trigger", AccountType.REVENUE, code="4200"
+    )
+
+    # Build a transaction header directly (bypass service layer)
+    tx = Transaction(
+        description="Trigger test — unbalanced",
+        transaction_date=date(2024, 1, 1),
+        status=TransactionStatus.POSTED,
+    )
+    db_session.add(tx)
+    await db_session.flush()
+
+    # Insert unbalanced entries: debit=1000, credit=500
+    db_session.add(
+        Entry(
+            transaction_id=tx.id,
+            account_id=debit_acct.id,
+            direction=Direction.DEBIT,
+            amount=1000,
+            currency="EUR",
+            converted_amount_usd=1000,
+        )
+    )
+    db_session.add(
+        Entry(
+            transaction_id=tx.id,
+            account_id=credit_acct.id,
+            direction=Direction.CREDIT,
+            amount=500,
+            currency="EUR",
+            converted_amount_usd=500,
+        )
+    )
+    await db_session.flush()
+
+    # The deferred trigger fires at COMMIT — should raise
+    with pytest.raises(IntegrityError, match="not balanced"):
+        await db_session.commit()
