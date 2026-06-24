@@ -152,7 +152,7 @@ Each trace shows the full request lifecycle including child spans for individual
 
 Load tested with [Locust](https://locust.io/) simulating authenticated clients mixing transaction writes (`POST /api/v1/transactions`, weight 7) and balance reads (`GET /api/v1/accounts/{id}/balance`, weight 3). **0% error rate** at all concurrency levels (100 / 300 / 500 users).
 
-The goal was to **locate bottlenecks**, not to publish latency SLAs. The single-process dev server saturates at ~10 req/s — absolute p99 reflects client queueing at the saturation point, not per-request compute time.
+The goal was to **locate bottlenecks**, not to publish latency SLAs. The single-process dev server saturates at ~2.4 req/s (see the table below) — absolute p99 reflects client queueing at the saturation point, not per-request compute time.
 
 ### Bottleneck analysis and scaling results
 
