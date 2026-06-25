@@ -50,7 +50,7 @@ downstream signatures (`require_admin`, service layer) is replaced with
 
 Role changes and deactivations (`is_active = False`) applied in the database
 are **not reflected in existing tokens** until those tokens expire.
-The window is bounded by `ACCESS_TOKEN_EXPIRE_MINUTES` (default: 30 minutes).
+The window is bounded by `ACCESS_TOKEN_EXPIRE_MINUTES` (configured to 30 minutes in this deployment).
 
 **Mitigation options** (deferred to post-MVP):
 - Short-lived tokens (e.g. 5 min) + silent refresh

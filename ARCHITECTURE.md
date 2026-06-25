@@ -33,7 +33,7 @@ id            UUID  PK
 code          TEXT  UNIQUE          -- e.g. "1100", "2000"
 name          TEXT
 type          TEXT                  -- ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE
-currency      CHAR(3)               -- ISO 4217 (EUR, USD, JPY …)
+currency      VARCHAR(3)            -- ISO 4217 (EUR, USD, JPY …)
 is_active     BOOLEAN
 created_at    TIMESTAMPTZ
 updated_at    TIMESTAMPTZ
@@ -47,7 +47,7 @@ transaction_id  UUID  FK → transactions.id  ON DELETE RESTRICT
 account_id      UUID  FK → accounts.id      ON DELETE RESTRICT
 direction       TEXT  -- DEBIT | CREDIT
 amount          BIGINT CHECK (amount > 0)   -- minor currency unit (cents)
-currency        CHAR(3)
+currency        VARCHAR(3)
 created_at      TIMESTAMPTZ
         │ N
         │
@@ -75,7 +75,7 @@ Formal ADR files with their own numbering live in `docs/adr/`.
 ### Money as BIGINT (minor units)
 
 **Decision**: Store all monetary amounts as `BIGINT` representing the smallest
-currency unit (cents, pence, yen). A separate `currency CHAR(3)` column carries
+currency unit (cents, pence, yen). A separate currency VARCHAR(3) column carries
 the ISO 4217 code.
 
 **Rationale**: Stripe and Mollie both use this convention internally and in their
@@ -332,7 +332,7 @@ after Redis caching optimisations in S7-4.
 **Trade-off — stale claims window**:
 - Role changes and deactivations applied in the database are **not
   reflected in existing tokens** until those tokens expire. The window
-  is bounded by `ACCESS_TOKEN_EXPIRE_MINUTES` (default: 30 min).
+   is bounded by `ACCESS_TOKEN_EXPIRE_MINUTES` (configured to 30 min in this deployment).
 - Mitigation options (deferred to post-MVP): short-lived tokens (5 min)
   + silent refresh, or a token blocklist in Redis.
 - For a portfolio project with no production users, the 30-minute
