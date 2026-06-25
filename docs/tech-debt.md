@@ -46,7 +46,7 @@ Items are compressed to one-line summaries. Each row describes the problem, fix,
 
 | ID | Summary |
 |----|---------|
-| TD-026 | Default connection pool too small → configurable `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` env vars |
+| TD-026 | Default `pool_size=5` caused `QueuePool limit of size 5 overflow 10 reached` under 100 concurrent users → configurable `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` env vars; post-fix error rate 0% |
 | TD-027 | Synchronous bcrypt blocked the event loop → wrapped in `asyncio.to_thread` |
 | TD-020 | Redis connection pool created per request → singleton lifespan client, ~48% latency improvement |
 | TD-015 | Balance endpoint ~65ms on cache hit due to per-request DB query → JWT claims eliminated DB lookup, ~37ms |
