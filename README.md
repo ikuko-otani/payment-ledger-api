@@ -20,8 +20,10 @@ Built as a portfolio project to demonstrate production-level backend engineering
 ### Key Features
 
 - **Double-entry transactions** with balance validation (total debits = total credits)
-- **Idempotency-key support** via Redis — safely retry requests without duplicates
-- **JWT authentication** with bcrypt password hashing
+- **Multi-currency support** — hub-and-spoke USD conversion at write time with point-in-time exchange rates and `ROUND_HALF_UP` rounding
+- **Idempotency-key support** via Redis — Stripe-style response replay (`200`), in-flight duplicate rejection (`409`), and fingerprint mismatch detection (`422`)
+- **Immutable audit log** — append-only `audit_logs` with JSONB before/after snapshots for every write operation
+- **JWT authentication** with bcrypt password hashing and role-based access control (`admin` / `auditor`)
 - **Distributed tracing** with OpenTelemetry + Jaeger
 - **Async-first architecture** — SQLAlchemy 2.0 async sessions with asyncpg
 - **96% test coverage** with testcontainers (real PostgreSQL, no mocks)
