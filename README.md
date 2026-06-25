@@ -96,6 +96,10 @@ All monetary amounts are stored as `BIGINT` in the currency's smallest unit (e.g
 
 Transactions are never updated or deleted. The status field models a `PENDING → POSTED → VOIDED` lifecycle defined in [ADR-005](docs/adr/005-transaction-status-lifecycle.md). Currently only `POSTED` is used at write time; the `VOIDED` transition (via a dedicated reversal endpoint) is a planned extension. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
 
+### Defense in depth: deferred constraint trigger
+
+The double-entry balance is enforced at two independent layers. The service layer validates before persisting (returning a clear `422` error); a PostgreSQL `CONSTRAINT TRIGGER` with `DEFERRABLE INITIALLY DEFERRED` re-checks at `COMMIT`, catching any write that bypasses the application — direct SQL, migration scripts, or admin tools. → [ADR-007](docs/adr/007-deferred-balance-constraint-trigger.md)
+
 ### JWT claims eliminate per-request DB lookups
 
 User role and active status are embedded in the JWT payload at login. Authenticated requests are resolved entirely from the token — no database query required. This eliminates the per-request DB query that previously dominated the latency budget (~65 ms on the balance endpoint with cache hit). JWT decoding is a pure in-memory operation, at the cost of a 30-minute revocation delay (acceptable for this deployment). → [ADR-006](docs/adr/006-jwt-claims-no-db-per-request.md)
