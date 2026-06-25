@@ -102,7 +102,7 @@ The double-entry balance is enforced at two independent layers. The service laye
 
 ### JWT claims eliminate per-request DB lookups
 
-User role and active status are embedded in the JWT payload at login. Authenticated requests are resolved entirely from the token — no database query required. This eliminates the per-request DB query that previously dominated the latency budget (~65 ms on the balance endpoint with cache hit). JWT decoding is a pure in-memory operation, at the cost of a 30-minute revocation delay (acceptable for this deployment). → [ADR-006](docs/adr/006-jwt-claims-no-db-per-request.md)
+User role and active status are embedded in the JWT payload at login. Authenticated requests are resolved entirely from the token — no database query required. This eliminated the per-request DB query that previously dominated the latency budget, reducing balance endpoint cache-hit latency from ~65 ms to ~37 ms. JWT decoding is a pure in-memory operation, at the cost of a 30-minute revocation delay (acceptable for this deployment). → [ADR-006](docs/adr/006-jwt-claims-no-db-per-request.md)
 
 ## Getting Started
 
