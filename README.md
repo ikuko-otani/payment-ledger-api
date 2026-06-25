@@ -86,9 +86,9 @@ Key architectural choices are recorded as ADRs in [`docs/adr/`](docs/adr/). Here
 
 All monetary amounts are stored as `BIGINT` in the currency's smallest unit (e.g., `1000` = €10.00). Integer arithmetic eliminates IEEE 754 rounding errors entirely. This is the same convention Stripe, Mollie, and Adyen use in their public APIs. → [ADR-004](docs/adr/004-money-as-bigint-minor-units.md)
 
-### Redis-backed idempotency keys
+### Redis-backed idempotency with response replay
 
-`POST /transactions` accepts an `Idempotency-Key` header. The key is stored in Redis with a 24-hour TTL. If a client retries the same request, the API returns `409 Conflict` instead of creating a duplicate transaction. This pattern is critical for payment systems where network failures can trigger retries. → [ADR-001](docs/adr/001-redis-for-idempotency-key.md)
+`POST /transactions` accepts an `Idempotency-Key` header. The key is stored in Redis with a 24-hour TTL, following a Stripe-style two-phase state machine: if a client retries the same request after success, the API replays the original response with `200 OK`; an in-flight duplicate returns `409 Conflict`; reusing the same key with a different request body returns `422 Unprocessable Entity`. This pattern is critical for payment systems where network failures can trigger retries. → [ADR-001](docs/adr/001-redis-for-idempotency-key.md)
 
 ### Immutable ledger with status lifecycle
 
