@@ -57,9 +57,12 @@ The current behaviour:
 5. **On failure** — the key is deleted from Redis, allowing the client to retry with
    the same key.
 
-This design guarantees exactly-once semantics for successful requests and safe retry
-for failed ones. The trade-off is increased per-key storage in Redis (response body
-cached alongside the fingerprint) and slightly more complex error-handling logic.
+This design provides effectively-once semantics for successful requests and safe
+retry for failed ones. A narrow window exists: if the process crashes after DB
+commit but before the Redis key is updated from "pending" to the cached response,
+the key remains in "pending" state and returns 409 until its 24-hour TTL expires.
+True exactly-once would require an atomic commit across PostgreSQL and Redis
+(e.g. transactional outbox).
 
 ## Consequences
 

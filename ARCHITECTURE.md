@@ -188,10 +188,13 @@ Stripe-style semantics (`app/dependencies/idempotency.py`):
    acquired, the key is deleted so the client can retry with the same key.
 
 **Consequence**: the idempotency layer is no longer a simple duplicate gate;
-it is a correctness mechanism that guarantees *exactly-once semantics* for
-successful requests and safe retry for failed ones. The trade-off is
-increased Redis storage per key (response body cached alongside the
-fingerprint) and slightly more complex error-handling logic.
+it is a correctness mechanism that provides *effectively-once semantics*
+for successful requests and safe retry for failed ones. (A crash between
+DB commit and Redis cache write could leave a pending key for up to 24 h,
+returning 409 until expiry — true exactly-once would require an atomic
+commit across both stores.)
+The trade-off is increased Redis storage per key (response body cached
+alongside the fingerprint) and slightly more complex error-handling logic.
 
 ---
 
