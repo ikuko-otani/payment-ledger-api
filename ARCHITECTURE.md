@@ -26,6 +26,8 @@ Three core entities model the domain:
 
 ## 2. ER Diagram
 
+### Core ledger (double-entry)
+
 ```
 accounts
 ─────────────────────────────
@@ -33,7 +35,7 @@ id            UUID  PK
 code          TEXT  UNIQUE          -- e.g. "1100", "2000"
 name          TEXT
 type          TEXT                  -- ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE
-currency      VARCHAR(3)            -- ISO 4217 (EUR, USD, JPY …)
+currency      VARCHAR(3) FK → currencies.code
 is_active     BOOLEAN
 created_at    TIMESTAMPTZ
 updated_at    TIMESTAMPTZ
@@ -42,13 +44,13 @@ updated_at    TIMESTAMPTZ
         │
         │ N
 entries ─────────────────────────────────────────────────────────────
-id              UUID  PK
-transaction_id  UUID  FK → transactions.id  ON DELETE RESTRICT
-account_id      UUID  FK → accounts.id      ON DELETE RESTRICT
-direction       TEXT  -- DEBIT | CREDIT
-amount          BIGINT CHECK (amount > 0)   -- minor currency unit (cents)
-currency        VARCHAR(3)
-created_at      TIMESTAMPTZ
+id                   UUID    PK
+transaction_id       UUID    FK → transactions.id  ON DELETE RESTRICT
+account_id           UUID    FK → accounts.id      ON DELETE RESTRICT
+direction            TEXT    -- DEBIT | CREDIT
+amount               BIGINT CHECK (amount > 0)  -- minor currency unit
+currency             VARCHAR(3) FK → currencies.code
+converted_amount_usd BIGINT  -- amount × FX rate at write time
         │ N
         │
         │ 1
@@ -60,6 +62,54 @@ status           TEXT  -- PENDING | POSTED | VOIDED
 posted_at        TIMESTAMPTZ
 created_at       TIMESTAMPTZ
 metadata         JSONB
+```
+
+### Multi-currency
+
+```
+currencies
+─────────────────────────────
+id              UUID  PK
+code            VARCHAR(3)  UNIQUE   -- ISO 4217
+name            VARCHAR(100)
+decimal_places  INTEGER              -- 2 for EUR/USD, 0 for JPY
+is_active       BOOLEAN
+created_at      TIMESTAMPTZ
+
+exchange_rates
+─────────────────────────────
+id                UUID  PK
+from_currency_id  UUID  FK → currencies.id
+to_currency_id    UUID  FK → currencies.id
+rate              NUMERIC(18,8)
+effective_date    DATE
+created_by_id     UUID  FK → users.id
+created_at        TIMESTAMPTZ
+UNIQUE(from_currency_id, to_currency_id, effective_date)
+```
+
+### Auth & audit
+
+```
+users
+─────────────────────────────
+id              UUID  PK
+email           TEXT  UNIQUE
+hashed_password TEXT
+role            ENUM(admin, auditor)
+is_active       BOOLEAN
+created_at      TIMESTAMPTZ
+
+audit_logs
+─────────────────────────────
+id            UUID  PK
+user_id       UUID  FK → users.id  ON DELETE RESTRICT
+entity_type   TEXT                  -- "transaction", "account", …
+entity_id     UUID
+action        TEXT                  -- "create", "update", "delete"
+before_value  JSONB
+after_value   JSONB
+created_at    TIMESTAMPTZ
 ```
 
 Invariant: `SUM(amount) WHERE direction='DEBIT' = SUM(amount) WHERE direction='CREDIT'`
