@@ -1,7 +1,8 @@
 """Transaction model — a double-entry transaction header.
 
 One Transaction links to two or more Entry rows (debit + credit).
-Balance rule (debit_sum == credit_sum) is enforced at the application layer.
+Balance rule (debit_sum == credit_sum) is enforced at the service layer
+and re-checked by a deferred constraint trigger at COMMIT.
 Transactions are immutable once POSTED; corrections use reversal transactions.
 """
 

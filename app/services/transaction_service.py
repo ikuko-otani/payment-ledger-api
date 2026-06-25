@@ -1,11 +1,12 @@
 """Transaction service — orchestrates DB writes and enforces double-entry rule.
 
 Validation responsibilities:
-  - Double-entry balance : debit_sum == credit_sum  (enforced here)
+  - Double-entry balance : debit_sum == credit_sum  (primary check, enforced here)
   - account_id existence : each entry.account_id must exist in accounts table
   - Value shape          : delegated to Pydantic schemas (amount > 0, etc.)
 
-PostgreSQL CHECK cannot aggregate across rows, so balance is enforced here.
+A deferred CONSTRAINT TRIGGER (trg_check_entries_balance) re-checks balance
+at COMMIT as a DB-level safety net for writes that bypass this service layer.
 """
 
 from __future__ import annotations
