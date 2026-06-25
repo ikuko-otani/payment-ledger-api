@@ -58,6 +58,7 @@ transactions
 ─────────────────────────────
 id               UUID  PK
 description      TEXT
+transaction_date DATE                  -- accounting date (ADR-003), FX rate lookup key
 status           TEXT  -- PENDING | POSTED | VOIDED
 posted_at        TIMESTAMPTZ
 created_at       TIMESTAMPTZ
