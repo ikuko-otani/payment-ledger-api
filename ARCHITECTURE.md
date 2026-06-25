@@ -216,7 +216,7 @@ instances.
 **Trade-off — what JWT gives up**:
 - *Instant revocation* is hard. A valid token stays valid until expiry even
   after a user is disabled. Mitigation options include: short-lived tokens
-  (15 min), a token blocklist in Redis, or opaque reference tokens. These
+  (5 min), a token blocklist in Redis, or opaque reference tokens. These
   are deferred to a post-MVP hardening sprint.
 - *Payload size*: every request carries the full token. For APIs with very
   large claims sets, this adds per-request overhead vs. a session ID cookie.
