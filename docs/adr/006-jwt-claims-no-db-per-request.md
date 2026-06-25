@@ -43,9 +43,8 @@ downstream signatures (`require_admin`, service layer) is replaced with
 
 ### Positive
 - Eliminates one DB query per authenticated request.
-- Cache-hit latency target: ~65 ms → < 10 ms (Redis itself is < 1 ms).
-- `get_current_user` becomes a pure in-memory operation; no `AsyncSession`
-  dependency required.
+- Balance endpoint cache-hit latency improved from ~65 ms to ~37 ms by removing
+  the DB round-trip; `get_current_user` itself is now a pure in-memory decode.
 
 ### Negative — Security trade-off (accepted)
 
