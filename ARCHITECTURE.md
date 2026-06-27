@@ -161,7 +161,7 @@ present, and raises `check_violation` (SQLSTATE 23514) if debits ≠ credits.
 PostgreSQL's unique index provided strong atomicity with zero additional
 infrastructure.
 
-**Updated in S2-3**: Migrated to Redis-backed idempotency with a 24 h TTL
+**Updated**: Migrated to Redis-backed idempotency with a 24 h TTL
 and removed the `idempotency_key` column from `transactions`.
 See `docs/adr/001-redis-for-idempotency-key.md` for the full rationale.
 
@@ -172,7 +172,7 @@ dependency on the write path — if unavailable, `POST /transactions` returns
 500 rather than silently skipping the check, because a skipped idempotency
 check could create duplicate transactions (correctness over availability).
 
-**Evolved in S7 — request fingerprinting and response replay**:
+**Evolved — request fingerprinting and response replay**:
 
 The implementation now follows a two-phase Redis state machine with
 Stripe-style semantics (`app/dependencies/idempotency.py`):
@@ -369,7 +369,7 @@ See `docs/adr/006-jwt-claims-no-db-per-request.md` for the full ADR.
 **What was rejected**: The previous implementation resolved the JWT `sub`
 claim into a full `User` ORM object via `SELECT * FROM users WHERE id = ?`
 on every request. This DB round-trip dominated the latency budget even
-after Redis caching optimisations in S7-4.
+after earlier Redis caching optimisations.
 
 **Rationale**:
 - *Latency reduction*: the only fields consumed downstream are `id`,

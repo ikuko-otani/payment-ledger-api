@@ -2,7 +2,7 @@
 
 ## Summary
 
-During S1-4 (`pytest` foundation), several issues appeared while trying to run PostgreSQL-backed tests with `pytest`, `testcontainers`, Alembic, FastAPI, and async SQLAlchemy.
+While building the pytestfoundation, several issues appeared when trying to run PostgreSQL-backed tests withpytest, testcontainers, Alembic, FastAPI, and async SQLAlchemy.
 
 Final stable outcome:
 - `uv run pytest -v` passes with 7 tests.
@@ -106,10 +106,10 @@ async_url = sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1
 **Result**
 - The HTTP-layer API integration approach remained unstable for this project at this stage.
 
-**Stable resolution for S1-4**
+**Stable resolution**
 - Move test scope one layer down:
   - test **DB/model/service/schema behavior** directly,
-  - do **not** run HTTP-layer integration tests in this Goal.
+  - do **not** run HTTP-layer integration tests at this stage.
 
 This preserved the real PostgreSQL test environment while removing unstable ASGI/dependency-lifecycle interactions.
 
@@ -125,7 +125,7 @@ This preserved the real PostgreSQL test environment while removing unstable ASGI
 - The underlying database/session concurrency issue had to be solved first.
 
 **Resolution**
-- Same as above: stop using HTTP-layer integration tests for S1-4 and move to DB/service/schema integration tests.
+- Same as above: stop using HTTP-layer integration tests at this stage and move to DB/service/schema integration tests.
 
 ---
 
@@ -143,11 +143,11 @@ ls: cannot access 'C:/Users/.../Git/var/run/docker.sock': No such file or direct
 
 **Lesson**
 - If Docker socket debugging is necessary on Windows, prefer PowerShell/CMD for validation.
-- For this Goal, host-side `uv run pytest -v` was the better direction than Docker-in-Docker style execution.
+- For this project, host-side uv run pytest -v was the better direction than Docker-in-Docker style execution.
 
 ---
 
-## Final stable test strategy for S1-4
+## Final stable test strategy
 
 The final working approach was:
 
@@ -174,21 +174,21 @@ uv run pytest -v
 
 ## Why this was the right trade-off
 
-For S1-4, the main goal was a stable pytest foundation with real PostgreSQL.
+At this stage, the main goal was a stable pytest foundation with real PostgreSQL.
 The most important achievement was:
 - ephemeral DB startup,
 - automatic schema setup,
 - green tests against a real database,
 - validation of core bookkeeping invariants.
 
-HTTP-layer API integration tests are still worth doing later, but they should be reintroduced in a separate, smaller Goal after isolating the FastAPI dependency/session lifecycle more carefully.
+HTTP-layer API integration tests are still worth doing later, but they should be reintroduced as a separate, smaller effort after isolating the FastAPI dependency/session lifecycle more carefully.
 
 ---
 
 ## Follow-up tasks
 
 - Add a dedicated troubleshooting note if HTTP-layer async integration tests are retried later.
-- Revisit API integration testing in a separate Goal with a minimal reproducible setup first.
+- Revisit API integration testing as a separate task with a minimal reproducible setup first.
 - Clean up warnings:
   - Alembic `path_separator=os`
   - deprecation around `HTTP_422_UNPROCESSABLE_ENTITY`

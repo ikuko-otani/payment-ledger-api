@@ -8,7 +8,7 @@
 `get_current_user` (`app/core/deps.py`) previously resolved the JWT `sub` claim
 into a full `User` ORM object by issuing a `SELECT * FROM users WHERE id = ?`
 on every authenticated request. This DB round-trip dominated the latency budget:
-after switching to a lifespan-scoped Redis client in S7-4, the cache-hit latency
+after switching to a lifespan-scoped Redis client, the cache-hit latency
 dropped from ~124 ms to ~65 ms, but the DB query for `get_current_user` remained
 the primary bottleneck.
 
