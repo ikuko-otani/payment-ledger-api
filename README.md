@@ -33,7 +33,7 @@ Built as a portfolio project to demonstrate production-level backend engineering
 
 I spent over a decade building enterprise systems — mostly in PHP and Oracle PL/SQL. Financial accounting, order management, and manufacturing systems were a recurring theme, and ledger integrity was an everyday concern.
 
-When I decided to transition into modern backend engineering, I chose a domain I already understood deeply: double-entry bookkeeping. This let me focus on learning the new stack (async Python, SQLAlchemy 2.0, Redis, Docker, CI/CD) without getting lost in unfamiliar business rules.
+When I decided to transition into modern backend engineering, I chose a domain I already understood deeply: double-entry bookkeeping. This let me demonstrate production-level engineering with a modern async Python stack — without getting lost in unfamiliar business rules.
 
 The goal was not to build a toy CRUD app, but to implement the same invariants a production payment ledger enforces — balanced entries, idempotent writes, immutable audit trails — using modern tooling.
 
