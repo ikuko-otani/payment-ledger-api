@@ -4,15 +4,6 @@ __pycache__/
 *.py[cod]
 .venv/
 
-# Personal goal template (not version-controlled)
-flagship-goal-prompt-template.md
-
-# Claude Code working rules (local-only, not published)
-CLAUDE.md
-
-# Claude Code local settings (not version-controlled)
-.claude/
-
 # pytest / coverage artifacts
 .pytest_cache/
 .coverage
@@ -34,9 +25,3 @@ htmlcov/
 dist/
 build/
 *.egg-info/
-
-# Personal learning notes (local-only, not published)
-docs/learning-notes/
-
-# Internal review notes (local-only, not published)
-docs/reviews/
