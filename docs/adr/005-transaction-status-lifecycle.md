@@ -9,13 +9,11 @@ Accepted
 An immutable ledger never deletes or updates posted transactions (ADR-004).
 However, real-world accounting requires a way to cancel a transaction — for
 example, when an invoice is disputed or a payment is reversed.
-Without astatus field, cancellation would require physical deletion,
+Without a status field, cancellation would require physical deletion,
 which destroys the audit trail.
 
-Additionally, some systems require an approval step
-before a transaction affects balances
+Additionally, some systems require an approval step before a transaction affects balances
 (two-phase commit: create as PENDING, then POST after approval).
-A status field enables this workflow without schema changes.
 
 ## Decision
 
