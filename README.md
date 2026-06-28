@@ -48,7 +48,7 @@ The goal was not to build a toy CRUD app, but to implement the same invariants a
 | Cache | Redis 7 (Upstash on Fly.io) |
 | Migration | Alembic |
 | Auth | JWT (PyJWT) + bcrypt |
-| Observability | OpenTelemetry + Jaeger |
+| Observability | OpenTelemetry + Jaeger, structlog (JSON) |
 | CI | GitHub Actions |
 | Deploy | Fly.io |
 | Package Manager | uv |
@@ -144,6 +144,11 @@ uv run pytest
 Tests use [testcontainers](https://testcontainers-python.readthedocs.io/) — each run spins up a real PostgreSQL instance in Docker.
 
 ## Observability
+
+All requests are logged as structured JSON using structlog — each log entry
+includes `request_id`, `trace_id`, `method`, `path`, `status_code`, and
+`latency_ms`. The `trace_id` field ties log lines to the corresponding Jaeger
+span, so a single request can be inspected from both angles.
 
 The API is instrumented with [OpenTelemetry](https://opentelemetry.io/) and ships with [Jaeger](https://www.jaegertracing.io/) for distributed tracing.
 
