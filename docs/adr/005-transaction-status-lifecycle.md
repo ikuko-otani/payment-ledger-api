@@ -19,8 +19,9 @@ Additionally, some systems require an approval step before a transaction affects
 
 Add `status ENUM (PENDING, POSTED, VOIDED)` to the `transactions` table.
 
-For MVP, all transactions are immediately set to `POSTED` on creation.
-`VOIDED` is reserved for future reversal support.
+All transactions are immediately set to `POSTED` on creation.
+`VOIDED` is applied via `POST /api/v1/transactions/{id}/void`, which creates
+a paired reversal transaction with opposite entry signs.
 
 ## State Machine
 
@@ -52,4 +53,5 @@ PENDING ──► POSTED ──► VOIDED
 
 - [Double-entry bookkeeping — voiding transactions](https://en.wikipedia.org/wiki/Double-entry_bookkeeping)
 - Implementation: `app/models/transaction.py`, `app/services/transaction_service.py`
+  - Void endpoint: `app/api/v1/routes/transactions.py` — `POST /transactions/{id}/void`
 - Related: ADR-003 (accounting date), ADR-004 (immutable log)

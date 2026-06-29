@@ -375,3 +375,84 @@ async def test_same_date_transactions_ordered_by_posted_at_desc(
     assert response.status_code == 200
     descriptions = [item["description"] for item in response.json()]
     assert descriptions == ["third", "second", "first"]
+
+
+def _void_payload_base(debit_id: str, credit_id: str, amount: int = 5000) -> dict:
+    return {
+        "description": "Sale for void test",
+        "transaction_date": "2024-06-01",
+        "entries": [
+            {
+                "account_id": debit_id,
+                "direction": "debit",
+                "amount": amount,
+                "currency": "EUR",
+            },
+            {
+                "account_id": credit_id,
+                "direction": "credit",
+                "amount": amount,
+                "currency": "EUR",
+            },
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_void_transaction_returns_200_with_voided_and_reversal(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    debit_id = await _seed_account(
+        db_session, "Cash-Void", AccountType.ASSET, code="2100"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-Void", AccountType.REVENUE, code="5100"
+    )
+
+    post_resp = await async_client.post(
+        "/api/v1/transactions", json=_void_payload_base(debit_id, credit_id)
+    )
+    assert post_resp.status_code == 201
+    tx_id = post_resp.json()["id"]
+
+    void_resp = await async_client.post(f"/api/v1/transactions/{tx_id}/void")
+
+    assert void_resp.status_code == 200
+    body = void_resp.json()
+    assert body["voided_transaction"]["id"] == tx_id
+    assert body["voided_transaction"]["status"] == "voided"
+    assert body["reversal_transaction"]["status"] == "posted"
+    assert body["reversal_transaction"]["id"] != tx_id
+
+
+@pytest.mark.asyncio
+async def test_void_already_voided_transaction_returns_409(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    debit_id = await _seed_account(
+        db_session, "Cash-DblVoid", AccountType.ASSET, code="2101"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-DblVoid", AccountType.REVENUE, code="5101"
+    )
+
+    post_resp = await async_client.post(
+        "/api/v1/transactions", json=_void_payload_base(debit_id, credit_id)
+    )
+    tx_id = post_resp.json()["id"]
+
+    await async_client.post(f"/api/v1/transactions/{tx_id}/void")
+    second_resp = await async_client.post(f"/api/v1/transactions/{tx_id}/void")
+
+    assert second_resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_void_nonexistent_transaction_returns_404(
+    async_client: AsyncClient,
+) -> None:
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    resp = await async_client.post(f"/api/v1/transactions/{fake_id}/void")
+    assert resp.status_code == 404

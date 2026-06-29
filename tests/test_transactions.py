@@ -917,7 +917,9 @@ async def test_void_already_voided_raises_409(
 async def test_void_reversal_entries_are_balanced_and_directions_inverted(
     db_session: AsyncSession,
 ) -> None:
-    tx, user_id = await _create_posted_transaction(db_session, "2002", "5002", amount=3000)
+    tx, user_id = await _create_posted_transaction(
+        db_session, "2002", "5002", amount=3000
+    )
     account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
     _, reversal = await void_transaction(tx_repo, audit_repo, tx.id, user_id)
     await db_session.commit()
@@ -943,9 +945,7 @@ async def test_void_writes_two_audit_logs_for_original_and_reversal(
     await db_session.commit()
 
     result = await db_session.execute(
-        select(AuditLog).where(
-            AuditLog.entity_id.in_([voided.id, reversal.id])
-        )
+        select(AuditLog).where(AuditLog.entity_id.in_([voided.id, reversal.id]))
     )
     logs = {(row.entity_id, row.action): row for row in result.scalars().all()}
 

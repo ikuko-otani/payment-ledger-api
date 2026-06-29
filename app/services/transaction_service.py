@@ -242,7 +242,9 @@ async def void_transaction(
     reversal_entries = [
         Entry(
             account_id=entry.account_id,
-            direction=Direction.CREDIT if entry.direction == Direction.DEBIT else Direction.DEBIT,
+            direction=Direction.CREDIT
+            if entry.direction == Direction.DEBIT
+            else Direction.DEBIT,
             amount=entry.amount,
             currency=entry.currency,
             converted_amount_usd=entry.converted_amount_usd,
