@@ -88,3 +88,8 @@ class TransactionRead(BaseModel):
     entries: list[EntryRead]
 
     model_config = {"from_attributes": True}
+
+
+class VoidResponse(BaseModel):
+    voided_transaction: TransactionRead
+    reversal_transaction: TransactionRead

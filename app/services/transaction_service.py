@@ -16,7 +16,7 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import ConflictError, ValidationError
 from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction, TransactionStatus
 from app.repositories.account_repository import AccountRepository
@@ -200,3 +200,69 @@ async def create_transaction(
         after=after_value,
     )
     return loaded
+
+
+async def void_transaction(
+    tx_repo: TransactionRepository,
+    audit_repo: AuditRepository,
+    transaction_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> tuple[Transaction, Transaction]:
+    """Mark a POSTED transaction as VOIDED and create a balanced reversal.
+
+    Returns (voided_original, reversal_transaction).
+    Raises ConflictError(409) if the transaction is already VOIDED.
+    Returns None for the original if not found (caller raises 404).
+    """
+    original = await tx_repo.find_by_id_with_entries(transaction_id)
+    if original is None:
+        return None  # type: ignore[return-value]  # caller must check
+
+    if original.status == TransactionStatus.VOIDED:
+        raise ConflictError(detail=f"Transaction {transaction_id} is already voided")
+
+    before_value: dict[str, Any] = {
+        "id": str(original.id),
+        "status": original.status.value,
+        "description": original.description,
+        "transaction_date": str(original.transaction_date),
+    }
+
+    # Mark original as VOIDED (immutable row stays, only status changes)
+    original.status = TransactionStatus.VOIDED
+
+    # Build reversal transaction with opposite entry directions
+    reversal = Transaction(
+        description=f"Reversal of: {original.description}",
+        transaction_date=original.transaction_date,
+        status=TransactionStatus.POSTED,
+        posted_at=datetime.now(UTC),
+        metadata_={"reversal_of": str(original.id)},
+    )
+    reversal_entries = [
+        Entry(
+            account_id=entry.account_id,
+            direction=Direction.CREDIT if entry.direction == Direction.DEBIT else Direction.DEBIT,
+            amount=entry.amount,
+            currency=entry.currency,
+            converted_amount_usd=entry.converted_amount_usd,
+        )
+        for entry in original.entries
+    ]
+
+    loaded_reversal = await tx_repo.save(reversal, reversal_entries)
+
+    after_value: dict[str, Any] = {
+        "id": str(original.id),
+        "status": original.status.value,
+        "reversal_transaction_id": str(loaded_reversal.id),
+    }
+    await audit_repo.log(
+        user_id=user_id,
+        entity_type="transaction",
+        entity_id=original.id,
+        action="void",
+        before=before_value,
+        after=after_value,
+    )
+    return original, loaded_reversal
