@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import ConflictError, ValidationError
 from app.models.account import Account, AccountType
 from app.models.currency import Currency
 from app.models.entry import Direction, Entry
@@ -22,7 +22,7 @@ from app.repositories.audit_repository import SQLAlchemyAuditRepository
 from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
 from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
 from app.schemas.transaction import EntryCreate, TransactionCreate
-from app.services.transaction_service import create_transaction
+from app.services.transaction_service import create_transaction, void_transaction
 
 
 async def _create_account(
@@ -828,3 +828,136 @@ async def test_db_trigger_rejects_unbalanced_entries_on_commit(
     # The deferred trigger fires at COMMIT — should raise
     with pytest.raises(IntegrityError, match="not balanced"):
         await db_session.commit()
+
+
+async def _create_posted_transaction(
+    db_session: AsyncSession,
+    debit_code: str,
+    credit_code: str,
+    amount: int = 1000,
+) -> tuple[Transaction, uuid.UUID]:
+    """Helper: create a user, two accounts, and a posted balanced transaction.
+
+    Returns (transaction, user_id). user_id is persisted in users table so
+    it satisfies the audit_logs.user_id FK on commit.
+    """
+    user_id = uuid.uuid4()
+    db_session.add(
+        User(
+            id=user_id,
+            email=f"void-test-{debit_code}@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+    )
+    await db_session.flush()
+
+    debit = await _create_account(
+        db_session, f"Cash-{debit_code}", AccountType.ASSET, code=debit_code
+    )
+    credit = await _create_account(
+        db_session, f"Revenue-{credit_code}", AccountType.REVENUE, code=credit_code
+    )
+    payload = TransactionCreate(
+        description="Original transaction",
+        transaction_date=date(2024, 6, 1),
+        entries=[
+            EntryCreate(
+                account_id=debit.id,
+                direction=Direction.DEBIT,
+                amount=amount,
+                currency="EUR",
+            ),
+            EntryCreate(
+                account_id=credit.id,
+                direction=Direction.CREDIT,
+                amount=amount,
+                currency="EUR",
+            ),
+        ],
+    )
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    tx = await create_transaction(
+        account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=user_id
+    )
+    await db_session.commit()
+    return tx, user_id
+
+
+@pytest.mark.asyncio
+async def test_void_posted_transaction_marks_original_voided(
+    db_session: AsyncSession,
+) -> None:
+    tx, user_id = await _create_posted_transaction(db_session, "2000", "5000")
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    voided, reversal = await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+    await db_session.commit()
+
+    assert voided.status == TransactionStatus.VOIDED
+    assert reversal.status == TransactionStatus.POSTED
+    assert reversal.metadata_ == {"reversal_of": str(tx.id)}
+
+
+@pytest.mark.asyncio
+async def test_void_already_voided_raises_409(
+    db_session: AsyncSession,
+) -> None:
+    tx, user_id = await _create_posted_transaction(db_session, "2001", "5001")
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+    await db_session.commit()
+
+    with pytest.raises(ConflictError) as exc_info:
+        await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_void_reversal_entries_are_balanced_and_directions_inverted(
+    db_session: AsyncSession,
+) -> None:
+    tx, user_id = await _create_posted_transaction(db_session, "2002", "5002", amount=3000)
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    _, reversal = await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+    await db_session.commit()
+
+    reversal_debits = sum(
+        e.amount for e in reversal.entries if e.direction == Direction.DEBIT
+    )
+    reversal_credits = sum(
+        e.amount for e in reversal.entries if e.direction == Direction.CREDIT
+    )
+    assert reversal_debits == reversal_credits == 3000
+
+
+@pytest.mark.asyncio
+async def test_void_writes_two_audit_logs_for_original_and_reversal(
+    db_session: AsyncSession,
+) -> None:
+    from app.models.audit_log import AuditLog
+
+    tx, user_id = await _create_posted_transaction(db_session, "2003", "5003")
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    voided, reversal = await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+    await db_session.commit()
+
+    result = await db_session.execute(
+        select(AuditLog).where(
+            AuditLog.entity_id.in_([voided.id, reversal.id])
+        )
+    )
+    logs = {(row.entity_id, row.action): row for row in result.scalars().all()}
+
+    # void log on original — lets auditors trace who voided and when
+    void_log = logs.get((voided.id, "void"))
+    assert void_log is not None
+    assert void_log.before_value["status"] == "posted"
+    assert void_log.after_value["status"] == "voided"
+    assert void_log.after_value["reversal_transaction_id"] == str(reversal.id)
+
+    # create log on reversal — lets auditors locate reversal by its own entity_id
+    create_log = logs.get((reversal.id, "create"))
+    assert create_log is not None
+    assert create_log.before_value is None
+    assert create_log.after_value["reversal_of"] == str(voided.id)

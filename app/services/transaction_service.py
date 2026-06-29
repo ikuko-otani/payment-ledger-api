@@ -252,17 +252,32 @@ async def void_transaction(
 
     loaded_reversal = await tx_repo.save(reversal, reversal_entries)
 
-    after_value: dict[str, Any] = {
-        "id": str(original.id),
-        "status": original.status.value,
-        "reversal_transaction_id": str(loaded_reversal.id),
-    }
+    # Audit log for the reversal creation — allows investigators to locate
+    # the reversal by its own entity_id, not just via the void log's after value.
+    await audit_repo.log(
+        user_id=user_id,
+        entity_type="transaction",
+        entity_id=loaded_reversal.id,
+        action="create",
+        before=None,
+        after={
+            "id": str(loaded_reversal.id),
+            "description": loaded_reversal.description,
+            "status": loaded_reversal.status.value,
+            "reversal_of": str(original.id),
+        },
+    )
+
     await audit_repo.log(
         user_id=user_id,
         entity_type="transaction",
         entity_id=original.id,
         action="void",
         before=before_value,
-        after=after_value,
+        after={
+            "id": str(original.id),
+            "status": original.status.value,
+            "reversal_transaction_id": str(loaded_reversal.id),
+        },
     )
     return original, loaded_reversal
