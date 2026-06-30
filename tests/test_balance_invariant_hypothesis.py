@@ -13,7 +13,12 @@ from datetime import date
 import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.exceptions import ValidationError
 from app.models.account import Account, AccountType
@@ -25,7 +30,6 @@ from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
 from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
 from app.schemas.transaction import EntryCreate, TransactionCreate
 from app.services.transaction_service import create_transaction
-
 
 # ---------------------------------------------------------------------------
 # Strategies
@@ -104,7 +108,9 @@ async def _seed_accounts(
     Caller must call ``await session.close(); await engine.dispose()`` when done.
     """
     engine = create_async_engine(async_url, echo=False)
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
     session = session_factory()
 
     suffix = uuid.uuid4().hex[:8]
@@ -154,7 +160,11 @@ def _make_repos(
 # ---------------------------------------------------------------------------
 
 
-@settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(
+    max_examples=20,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
 @given(data=st.data())
 @pytest.mark.asyncio
 async def test_balanced_entries_create_transaction_succeeds(
@@ -173,14 +183,20 @@ async def test_balanced_entries_create_transaction_succeeds(
         await session.commit()
 
         debit_sum = sum(e.amount for e in tx.entries if e.direction == Direction.DEBIT)
-        credit_sum = sum(e.amount for e in tx.entries if e.direction == Direction.CREDIT)
+        credit_sum = sum(
+            e.amount for e in tx.entries if e.direction == Direction.CREDIT
+        )
         assert debit_sum == credit_sum
     finally:
         await session.close()
         await engine.dispose()
 
 
-@settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(
+    max_examples=20,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
 @given(data=st.data())
 @pytest.mark.asyncio
 async def test_unbalanced_entries_raise_422(
@@ -195,7 +211,12 @@ async def test_unbalanced_entries_raise_422(
         account_repo, currency_repo, tx_repo, audit_repo = _make_repos(session)
         with pytest.raises(ValidationError) as exc_info:
             await create_transaction(
-                account_repo, currency_repo, tx_repo, audit_repo, payload, user_id=user_id
+                account_repo,
+                currency_repo,
+                tx_repo,
+                audit_repo,
+                payload,
+                user_id=user_id,
             )
         assert exc_info.value.status_code == 422
         assert "balanced" in str(exc_info.value.detail).lower()
