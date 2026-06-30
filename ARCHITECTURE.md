@@ -212,18 +212,19 @@ simplifies CDC (Change Data Capture) for downstream analytics.
 
 ## 4. Tech Stack
 
-| Layer            | Technology                              |
-|------------------|-----------------------------------------|
-| API              | FastAPI (async)                         |
-| Validation       | Pydantic v2                             |
-| ORM              | SQLAlchemy 2.0 (async + asyncpg driver) |
-| Migrations       | Alembic                                 |
-| Database         | PostgreSQL 16                           |
-| Auth             | JWT (PyJWT)                             |
-| Testing          | pytest + pytest-asyncio + testcontainers|
-| Containerisation | Docker + Docker Compose               |
-| CI               | GitHub Actions (lint / mypy / test)     |
-| Observability    | structlog (JSON) + OpenTelemetry        |
+| Layer            | Technology                                |
+|------------------|-------------------------------------------|
+| API              | FastAPI (async)                           |
+| Validation       | Pydantic v2                               |
+| ORM              | SQLAlchemy 2.0 (async + asyncpg driver)   |
+| Migrations       | Alembic                                   |
+| Database         | PostgreSQL 16                             |
+| Auth             | JWT (PyJWT)                               |
+| Testing          | pytest + pytest-asyncio + testcontainers  |
+| Containerisation | Docker + Docker Compose                   |
+| CI               | GitHub Actions (lint / mypy / test)       |
+| Observability    | structlog (JSON) + OpenTelemetry + Jaeger |
+| Metrics          | Prometheus + Grafana                      |
 
 ---
 
@@ -557,7 +558,8 @@ requirement.
 ## 8. Observability & Caching Design
 
 > Covers structlog (JSON logging), OpenTelemetry + Jaeger (distributed tracing),
-> and a Redis-backed Cache-Aside layer for `GET /accounts/{id}/balance`.
+> Prometheus + Grafana (metrics), and a Redis-backed Cache-Aside layer for
+> `GET /accounts/{id}/balance`.
 > Each subsection is written as an interview-ready entry: decision, rationale,
 > and trade-offs.
 
@@ -643,12 +645,39 @@ and binds it into every structlog entry via `structlog.contextvars`.
   `INVALID_SPAN` sentinel) instead of raising an error. The fix was to
   call `instrument_app(app)` before the app starts serving requests, not
   inside the lifespan callback.
-- *No metrics pillar yet*: latency percentiles and error-rate alerting
-  (Prometheus + Grafana) remain a "what I would add in production" item —
-  logs and traces alone cannot answer "is p99 latency degrading over the last
-  hour?" without manual aggregation.
 
-### 8.3 Caching strategy (Cache-Aside for account balances)
+### 8.3 Metrics (Prometheus + Grafana)
+
+**Decision**: Instrument the FastAPI application with
+[`prometheus-fastapi-instrumentator`](https://github.com/trallnag/prometheus-fastapi-instrumentator),
+exposing a `/metrics` endpoint that Prometheus scrapes every 15 seconds. A
+pre-provisioned Grafana dashboard visualises request rate, latency histogram
+(p50/p95/p99), and in-progress request count per route.
+
+**What was rejected**: Custom `Counter` / `Histogram` declarations using the
+`prometheus_client` library directly. This requires manually labelling every
+route and wiring middleware — `prometheus-fastapi-instrumentator` provides all
+standard HTTP metrics out of the box via a one-line call.
+
+**Rationale**:
+- *Closes the third observability pillar*: structlog answers "what happened"
+  per request; Jaeger answers "where time was spent" across spans; Prometheus
+  answers "is the aggregate error rate or latency degrading over time?" —
+  a question logs and traces alone cannot answer without manual aggregation.
+- *Zero-instrumentation overhead on the hot path*: the instrumentator hooks
+  into Starlette middleware; no changes to route handlers are required.
+- *Grafana provisioning via Docker Compose*: datasource and dashboard JSON
+  are mounted from `monitoring/grafana/provisioning/` so the dashboard
+  appears automatically on `docker compose up -d` with no manual import step.
+
+**Trade-off**:
+- The `/metrics` endpoint is unauthenticated in the current deployment —
+  acceptable for a local-dev and portfolio context; a production deployment
+  would place it behind a network policy or scrape-only VPN path.
+- Prometheus and Grafana are local-dev services only; Fly.io deployment does
+  not include them (the managed metrics tier would be the production equivalent).
+
+### 8.4 Caching strategy (Cache-Aside for account balances)
 
 **Decision**: Implement the **Cache-Aside** (lazy-loading) pattern for
 `GET /accounts/{id}/balance`. The service checks Redis first
@@ -697,7 +726,7 @@ that transaction (see `app/repositories/account_repository.py`, `app/core/redis.
   traffic this is negligible; a production hardening pass would add a
   short-lived lock or "request coalescing" around the cache-fill step.
 
-### 8.4 N+1 prevention strategy (selectinload / contains_eager)
+### 8.5 N+1 prevention strategy (selectinload / contains_eager)
 
 **Decision**: Apply explicit eager-loading strategies to every repository
 query that returns entities with relationships:
@@ -742,6 +771,5 @@ parent row. In async mode this is not just slow — it raises
 
 - **Event sourcing** (Outbox pattern + Kafka) for reliable downstream fan-out
 - **Row-level security** in PostgreSQL for multi-tenant isolation
-- **Prometheus metrics** (transaction latency p99, balance drift alert)
 - **Kubernetes Helm chart** for horizontal scaling
 
