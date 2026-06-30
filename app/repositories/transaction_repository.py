@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 
 from fastapi import Depends
@@ -22,6 +23,11 @@ class TransactionRepository(ABC):
 
     @abstractmethod
     async def list_all(self, limit: int, offset: int) -> list[Transaction]: ...
+
+    @abstractmethod
+    async def find_by_id_with_entries(
+        self, transaction_id: uuid.UUID
+    ) -> Transaction | None: ...
 
 
 class SQLAlchemyTransactionRepository(TransactionRepository):
@@ -57,6 +63,16 @@ class SQLAlchemyTransactionRepository(TransactionRepository):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def find_by_id_with_entries(
+        self, transaction_id: uuid.UUID
+    ) -> Transaction | None:
+        result = await self._db.execute(
+            select(Transaction)
+            .where(Transaction.id == transaction_id)
+            .options(selectinload(Transaction.entries))
+        )
+        return result.scalar_one_or_none()
 
 
 def get_transaction_repository(
