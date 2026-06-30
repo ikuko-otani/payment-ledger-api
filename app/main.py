@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -37,6 +38,7 @@ app = FastAPI(
 
 app.add_middleware(RequestLoggingMiddleware)
 FastAPIInstrumentor().instrument_app(app)
+Instrumentator().instrument(app).expose(app)
 app.include_router(api_router)
 
 
