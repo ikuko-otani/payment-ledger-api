@@ -265,3 +265,61 @@ async def test_unbalanced_entries_raise_422(
     finally:
         await session.close()
         await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# FX Rounding Property Tests (pure-function, no DB)
+# ---------------------------------------------------------------------------
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    amount=st.integers(min_value=0, max_value=1_000_000),
+    rate=st.decimals(
+        min_value="0.0001",
+        max_value="100.0",
+        places=6,
+        allow_nan=False,
+        allow_infinity=False,
+    ),
+)
+def test_convert_amount_usd_returns_non_negative_int(
+    amount: int,
+    rate: Decimal,
+) -> None:
+    """_convert_amount_usd always returns a non-negative int for valid inputs."""
+    result = _convert_amount_usd(amount, rate)
+    assert isinstance(result, int)
+    assert result >= 0
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    debit_amounts=st.lists(
+        st.integers(min_value=1, max_value=10_000),
+        min_size=2,
+        max_size=5,
+    ),
+    rate=st.decimals(
+        min_value="0.0001",
+        max_value="10.0",
+        places=6,
+        allow_nan=False,
+        allow_infinity=False,
+    ),
+)
+def test_fx_rounding_error_bounded_by_entry_count(
+    debit_amounts: list[int],
+    rate: Decimal,
+) -> None:
+    """Per-entry ROUND_HALF_UP may cause USD imbalance; error is bounded by entry count.
+
+    When N debit amounts sum to the same total as one credit entry (balanced in EUR),
+    converting each debit individually can produce a different USD sum than converting
+    the aggregate credit. This documents the known per-entry rounding design and asserts
+    the error stays within N (one rounding unit per entry).
+    """
+    credit_total = sum(debit_amounts)
+    converted_debit_sum = sum(_convert_amount_usd(a, rate) for a in debit_amounts)
+    converted_credit = _convert_amount_usd(credit_total, rate)
+    assert abs(converted_debit_sum - converted_credit) <= len(debit_amounts)
