@@ -961,3 +961,36 @@ async def test_void_writes_two_audit_logs_for_original_and_reversal(
     assert create_log is not None
     assert create_log.before_value is None
     assert create_log.after_value["reversal_of"] == str(voided.id)
+
+
+@pytest.mark.asyncio
+async def test_void_reversal_amounts_mirror_original(
+    db_session: AsyncSession,
+) -> None:
+    """Reversal entry amounts are copied from the original, with directions swapped.
+
+    original DEBIT total  == reversal CREDIT total
+    original CREDIT total == reversal DEBIT total
+    """
+    tx, user_id = await _create_posted_transaction(
+        db_session, "2004", "5004", amount=7500
+    )
+    account_repo, currency_repo, tx_repo, audit_repo = _make_repos(db_session)
+    voided, reversal = await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+    await db_session.commit()
+
+    original_debit_total = sum(
+        e.amount for e in voided.entries if e.direction == Direction.DEBIT
+    )
+    original_credit_total = sum(
+        e.amount for e in voided.entries if e.direction == Direction.CREDIT
+    )
+    reversal_debit_total = sum(
+        e.amount for e in reversal.entries if e.direction == Direction.DEBIT
+    )
+    reversal_credit_total = sum(
+        e.amount for e in reversal.entries if e.direction == Direction.CREDIT
+    )
+
+    assert original_debit_total == reversal_credit_total
+    assert original_credit_total == reversal_debit_total
