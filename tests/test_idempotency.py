@@ -214,7 +214,7 @@ async def test_balance_reflects_new_transaction_after_commit(
     db_session,
 ) -> None:
     """[H-2] Balance endpoint must return updated balance after a transaction is posted (TD-018)."""
-    from datetime import datetime
+    from datetime import UTC, datetime
 
     from tests.test_transactions import _create_account as create_account
 
@@ -254,7 +254,7 @@ async def test_balance_reflects_new_transaction_after_commit(
     r_post = await full_flow_client.post("/api/v1/transactions", json=payload)
     assert r_post.status_code == 201
 
-    as_of = datetime.utcnow().isoformat()
+    as_of = datetime.now(UTC).isoformat()
     r_balance = await full_flow_client.get(
         f"/api/v1/accounts/{acc_debit.id}/balance", params={"as_of": as_of}
     )

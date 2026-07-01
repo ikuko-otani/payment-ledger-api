@@ -48,7 +48,7 @@ class Transaction(Base):
         nullable=False,
         default=TransactionStatus.POSTED,
     )
-    # set to datetime.utcnow() in the service layer when status → POSTED
+    # set to datetime.now(UTC) in the service layer when status → POSTED
     posted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
