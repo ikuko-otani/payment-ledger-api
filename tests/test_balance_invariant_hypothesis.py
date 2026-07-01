@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from hypothesis import HealthCheck, assume, given, settings
@@ -29,11 +30,31 @@ from app.repositories.audit_repository import SQLAlchemyAuditRepository
 from app.repositories.currency_repository import SQLAlchemyCurrencyRepository
 from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
 from app.schemas.transaction import EntryCreate, TransactionCreate
-from app.services.transaction_service import create_transaction
+from app.services.transaction_service import _convert_amount_usd, create_transaction
 
 # ---------------------------------------------------------------------------
 # Strategies
 # ---------------------------------------------------------------------------
+
+
+@st.composite
+def _amounts_summing_to(draw: st.DrawFn, total: int, n: int) -> list[int]:
+    """Generate n positive integers that sum to total.
+
+    Requires total >= n so that [1, total-1] has room for n-1 unique cut points.
+    """
+    if n == 1:
+        return [total]
+    cuts = draw(
+        st.lists(
+            st.integers(min_value=1, max_value=total - 1),
+            min_size=n - 1,
+            max_size=n - 1,
+            unique=True,
+        )
+    )
+    boundaries = sorted([0] + cuts + [total])
+    return [boundaries[i + 1] - boundaries[i] for i in range(n)]
 
 
 @st.composite
@@ -42,25 +63,36 @@ def balanced_payload(
     debit_id: uuid.UUID,
     credit_id: uuid.UUID,
 ) -> TransactionCreate:
-    """Generate a TransactionCreate where debit_total == credit_total."""
-    total = draw(st.integers(min_value=1, max_value=100_000))
+    """Generate a TransactionCreate where debit_total == credit_total, across N entries."""
+    n_debits = draw(st.integers(min_value=1, max_value=3))
+    n_credits = draw(st.integers(min_value=1, max_value=3))
+    # total must be at least n_debits + n_credits so each amount is >= 1
+    total = draw(st.integers(min_value=n_debits + n_credits, max_value=100_000))
+    debit_amounts = draw(_amounts_summing_to(total, n_debits))
+    credit_amounts = draw(_amounts_summing_to(total, n_credits))
+
+    debit_entries = [
+        EntryCreate(
+            account_id=debit_id,
+            direction=Direction.DEBIT,
+            amount=amount,
+            currency="EUR",
+        )
+        for amount in debit_amounts
+    ]
+    credit_entries = [
+        EntryCreate(
+            account_id=credit_id,
+            direction=Direction.CREDIT,
+            amount=amount,
+            currency="EUR",
+        )
+        for amount in credit_amounts
+    ]
     return TransactionCreate(
-        description="Hypothesis: balanced",
+        description="Hypothesis: balanced N entries",
         transaction_date=date(2024, 1, 1),
-        entries=[
-            EntryCreate(
-                account_id=debit_id,
-                direction=Direction.DEBIT,
-                amount=total,
-                currency="EUR",
-            ),
-            EntryCreate(
-                account_id=credit_id,
-                direction=Direction.CREDIT,
-                amount=total,
-                currency="EUR",
-            ),
-        ],
+        entries=debit_entries + credit_entries,
     )
 
 
@@ -70,27 +102,37 @@ def unbalanced_payload(
     debit_id: uuid.UUID,
     credit_id: uuid.UUID,
 ) -> TransactionCreate:
-    """Generate a TransactionCreate where debit_total != credit_total."""
-    debit_amount = draw(st.integers(min_value=1, max_value=100_000))
-    credit_amount = draw(st.integers(min_value=1, max_value=100_000))
-    assume(debit_amount != credit_amount)
+    """Generate a TransactionCreate where debit_total != credit_total, across N entries."""
+    n_debits = draw(st.integers(min_value=1, max_value=3))
+    n_credits = draw(st.integers(min_value=1, max_value=3))
+    debit_total = draw(st.integers(min_value=n_debits, max_value=100_000))
+    credit_total = draw(st.integers(min_value=n_credits, max_value=100_000))
+    assume(debit_total != credit_total)
+    debit_amounts = draw(_amounts_summing_to(debit_total, n_debits))
+    credit_amounts = draw(_amounts_summing_to(credit_total, n_credits))
+
+    debit_entries = [
+        EntryCreate(
+            account_id=debit_id,
+            direction=Direction.DEBIT,
+            amount=amount,
+            currency="EUR",
+        )
+        for amount in debit_amounts
+    ]
+    credit_entries = [
+        EntryCreate(
+            account_id=credit_id,
+            direction=Direction.CREDIT,
+            amount=amount,
+            currency="EUR",
+        )
+        for amount in credit_amounts
+    ]
     return TransactionCreate(
-        description="Hypothesis: unbalanced",
+        description="Hypothesis: unbalanced N entries",
         transaction_date=date(2024, 1, 1),
-        entries=[
-            EntryCreate(
-                account_id=debit_id,
-                direction=Direction.DEBIT,
-                amount=debit_amount,
-                currency="EUR",
-            ),
-            EntryCreate(
-                account_id=credit_id,
-                direction=Direction.CREDIT,
-                amount=credit_amount,
-                currency="EUR",
-            ),
-        ],
+        entries=debit_entries + credit_entries,
     )
 
 
