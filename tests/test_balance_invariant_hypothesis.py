@@ -3,6 +3,18 @@
 Uses Hypothesis to verify that create_transaction:
   - accepts any balanced entry set (debit_total == credit_total) → no error
   - rejects any unbalanced entry set (debit_total != credit_total) → ValidationError 422
+
+Design note — why random natural numbers, not boundary values?
+  test_balanced_entries_create_transaction_succeeds and test_unbalanced_entries_raise_422
+  use Hypothesis for input variety, but the balance check itself (integer sum comparison)
+  is too simple for property-based *discovery* — any positive integers will pass or fail
+  deterministically. Their value is:
+    (a) Integration coverage: exercises the full stack (Pydantic → service → DB → response)
+        across N-entry combinations, not just the 2-entry case.
+    (b) Regression guard: catches accidental changes to the balance check logic in the
+        service layer (e.g. wrong operator, deleted check).
+  The genuinely non-trivial property test is test_fx_rounding_error_bounded_by_entry_count,
+  which verifies a mathematical bound that is not obvious from reading the code.
 """
 
 from __future__ import annotations
