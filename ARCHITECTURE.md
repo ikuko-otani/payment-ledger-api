@@ -441,6 +441,28 @@ on read (re-computing at query time using the current rate).
 - Changing BASE_CURRENCY requires a full data migration of all `converted_amount_usd`
   values — treat the constant as immutable once production data exists.
 
+### USD balance guarantee: original currency is the primary correctness requirement
+
+**Decision**: The system enforces double-entry balance in the transaction's original
+currency only. `converted_amount_usd` values are a reference/reporting view and are
+not required to sum to zero across a transaction.
+
+**Rationale**:
+- *Scope*: This is a management accounting ledger where the functional currency of
+  each transaction is the authoritative record. USD conversion is informational.
+- *Rounding coupling*: per-entry `ROUND_HALF_UP` means `SUM(convert(debit_i))` may
+  differ from `convert(SUM(debit_i))` by up to N cents — verified by property test
+  `test_fx_rounding_error_bounded_by_entry_count`. Adding a USD balance check without
+  first resolving this rounding gap would reject legitimate original-currency-balanced
+  transactions; the check and the rounding fix must be implemented together.
+- *Manual adjustment*: users who require USD balance can post a rounding adjustment
+  entry explicitly, preserving full audit visibility.
+
+**When this would need revisiting**: if USD were used as a settlement currency or as
+a consolidated reporting currency across legal entities — the scenario where global
+ERP systems enforce unified-currency balance (e.g. SAP FI foreign-currency document
+posting, where local-currency balance is mandatory). See also TD-050.
+
 ### JSONB for audit log snapshot columns
 
 **Decision**: Store `before_value` and `after_value` in `audit_logs` as
