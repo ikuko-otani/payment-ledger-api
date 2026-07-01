@@ -207,7 +207,7 @@ async def void_transaction(
     audit_repo: AuditRepository,
     transaction_id: uuid.UUID,
     user_id: uuid.UUID,
-) -> tuple[Transaction, Transaction]:
+) -> tuple[Transaction, Transaction] | None:
     """Mark a POSTED transaction as VOIDED and create a balanced reversal.
 
     Returns (voided_original, reversal_transaction).
@@ -216,7 +216,7 @@ async def void_transaction(
     """
     original = await tx_repo.find_by_id_with_entries(transaction_id)
     if original is None:
-        return None  # type: ignore[return-value]  # caller must check
+        return None  # caller must check
 
     if original.status == TransactionStatus.VOIDED:
         raise ConflictError(detail=f"Transaction {transaction_id} is already voided")
@@ -242,9 +242,11 @@ async def void_transaction(
     reversal_entries = [
         Entry(
             account_id=entry.account_id,
-            direction=Direction.CREDIT
-            if entry.direction == Direction.DEBIT
-            else Direction.DEBIT,
+            direction=(
+                Direction.CREDIT
+                if entry.direction == Direction.DEBIT
+                else Direction.DEBIT
+            ),
             amount=entry.amount,
             currency=entry.currency,
             converted_amount_usd=entry.converted_amount_usd,
