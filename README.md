@@ -50,9 +50,10 @@ The goal was not to build a toy CRUD app, but to implement the same invariants a
 | Migration | Alembic |
 | Auth | JWT (PyJWT) + bcrypt |
 | Observability | OpenTelemetry + Jaeger, structlog (JSON) |
-| Metrics       | Prometheus + Grafana                     |
+| Metrics | Prometheus + Grafana                     |
 | CI | GitHub Actions |
 | Deploy | Fly.io |
+| Testing | pytest + testcontainers + Hypothesis (property-based) |
 | Package Manager | uv |
 ## Live Demo
 
