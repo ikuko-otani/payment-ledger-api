@@ -92,6 +92,29 @@ Application layering: `api/` → `services/` → `repositories/` → `models/` (
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full ER diagrams and design decisions.
 
+### Example: record a sale
+
+Debit `Cash` €10.00, credit `Revenue` €10.00 — amounts in minor units ([ADR-004](docs/adr/004-money-as-bigint-minor-units.md)):
+
+```bash
+curl -X POST https://payment-ledger-api.fly.dev/api/v1/transactions \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{
+    "description": "Sale #1001",
+    "transaction_date": "2025-06-01",
+    "currency_code": "EUR",
+    "entries": [
+      { "account_id": "<cash-uuid>",    "direction": "debit",  "amount": 1000, "currency": "EUR" },
+      { "account_id": "<revenue-uuid>", "direction": "credit", "amount": 1000, "currency": "EUR" }
+    ]
+  }'
+```
+
+The API rejects unbalanced entries (debit_sum ≠ credit_sum) with 422.
+Retry the same request with the same Idempotency-Key to get a 200 replay of the original response.
+
 ## Design Decisions
 
 Key architectural choices are recorded as ADRs in [`docs/adr/`](docs/adr/). Here are the highlights:
@@ -115,6 +138,18 @@ The double-entry balance is enforced at two independent layers. The service laye
 ### JWT claims eliminate per-request DB lookups
 
 User role and active status are embedded in the JWT payload at login. Authenticated requests are resolved entirely from the token — no database query required. This eliminated the per-request DB query that previously dominated the latency budget, reducing balance endpoint cache-hit latency from ~65 ms to ~37 ms. JWT decoding is a pure in-memory operation, at the cost of a 30-minute revocation delay (acceptable for this deployment). → [ADR-006](docs/adr/006-jwt-claims-no-db-per-request.md)
+
+### Computed balance with no row-level locks
+
+Account balances are never stored as a column. Every `GET /accounts/{id}/balance`
+request aggregates the immutable `entries` table with `SUM(CASE debit/credit)` at
+read time. Because transaction writes are pure inserts with no mutable rows,
+two concurrent `POST /transactions` never conflict — no `SELECT ... FOR UPDATE`
+or optimistic retry loop is needed. Read cost is mitigated by a Redis Cache-Aside
+layer that invalidates per-account keys on each commit.
+The trade-off — O(N) query at scale — is noted in [ADR-002](docs/adr/002-concurrency-strategy.md)
+alongside the conditions under which a stored balance snapshot would be warranted.
+→ [ADR-002](docs/adr/002-concurrency-strategy.md)
 
 ## Getting Started
 
