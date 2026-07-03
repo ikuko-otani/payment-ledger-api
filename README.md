@@ -165,16 +165,14 @@ alongside the conditions under which a stored balance snapshot would be warrante
 # Clone and install
 git clone https://github.com/ikuko-otani/payment-ledger-api.git
 cd payment-ledger-api
+cp .env.example .env
 uv sync --all-groups
 
-# Start PostgreSQL, Redis, Jaeger, Prometheus, and Grafana
+# Start PostgreSQL, Redis, Jaeger, Prometheus, Grafana, and the API
 docker compose up -d
 
-# Run migrations
+# Run migrations (on host — see docs/troubleshooting/alembic-host-db-not-resolved.md)
 uv run alembic upgrade head
-
-# Start dev server
-uv run fastapi dev app/main.py
 ```
 
 Open http://localhost:8000/docs for the Swagger UI.
