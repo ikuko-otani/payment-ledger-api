@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 import pytest_asyncio
@@ -10,6 +11,7 @@ import redis.asyncio as aioredis
 from httpx import AsyncClient
 from testcontainers.redis import RedisContainer
 
+from app.core.config import settings
 from app.core.redis import get_redis_client
 from app.main import app as fastapi_app
 
