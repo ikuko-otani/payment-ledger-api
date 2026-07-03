@@ -88,7 +88,9 @@ class SQLAlchemyAccountRepository(AccountRepository):
             .where(
                 Entry.account_id == account_id,
                 Transaction.transaction_date <= as_of.date(),
-                Transaction.status == TransactionStatus.POSTED,
+                Transaction.status.in_(
+                    [TransactionStatus.POSTED, TransactionStatus.VOIDED]
+                ),
             )
         )
         return cast(int, result.scalar_one())

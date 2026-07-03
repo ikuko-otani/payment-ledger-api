@@ -32,6 +32,7 @@ Items are compressed to one-line summaries. Each row describes the problem, fix,
 | TD-035 | `accounts.currency` and `entries.currency` had no FK → `ForeignKey("currencies.code")` added |
 | TD-012 | No currency scale management → `decimal_places` column added to `Currency` model |
 | TD-039 | Exchange rate required exact date match → changed to most recent rate on-or-before |
+| TD-051 | `calculate_balance` excluded VOIDED transactions while including their sign-flipped reversal, so voiding netted to `-original` instead of `0` → filter widened to `status IN (POSTED, VOIDED)`; `test_balance_after_void_nets_to_zero` added as regression guard |
 
 ### Idempotency
 
@@ -56,6 +57,7 @@ Items are compressed to one-line summaries. Each row describes the problem, fix,
 | TD-042 | `redis.keys()` O(N) keyspace scan for cache invalidation → cursor-based `scan_iter` |
 | TD-028 | Dockerfile used dev server → multi-worker `uvicorn` (4 workers) for production |
 | TD-029 | Hardcoded pool settings → env-configurable, total connections bounded within `max_connections` |
+| TD-052 | Balance cache used the same short TTL for closed historical dates as for today, forcing redundant recomputation of values that invalidation-on-write already keeps correct → longer `balance_cache_ttl_historical_seconds` applied when `as_of` is in the past |
 
 ### API Correctness
 

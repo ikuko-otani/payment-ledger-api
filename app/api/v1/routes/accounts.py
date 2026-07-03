@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -74,9 +74,17 @@ async def get_account_balance(
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
     balance = await repo.calculate_balance(id, as_of)
+    # Closed-period balances are arithmetically stable — a long TTL is safe
+    # because create_transaction/void_transaction invalidate every
+    # balance:{account_id}:* key on write, regardless of date (see ARCHITECTURE.md §8.4).
+    ttl = (
+        settings.balance_cache_ttl_historical_seconds
+        if as_of.date() < date.today()
+        else settings.balance_cache_ttl_seconds
+    )
     await redis.set(
         cache_key,
         json.dumps({"balance": int(balance), "currency": account.currency}),
-        ex=settings.balance_cache_ttl_seconds,
+        ex=ttl,
     )
     return BalanceResponse(balance=balance, currency=account.currency, as_of=as_of)
