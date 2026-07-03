@@ -232,12 +232,7 @@ simplifies CDC (Change Data Capture) for downstream analytics.
 
 ## 5. Running Locally
 
-```bash
-git clone https://github.com/ikuko-otani/payment-ledger-api
-cd payment-ledger-api
-docker compose up          # PostgreSQL + API on :8000
-# http://localhost:8000/docs
-```
+See [README.md § Getting Started](README.md#getting-started) for setup steps.
 
 ---
 

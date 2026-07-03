@@ -130,7 +130,7 @@ All monetary amounts are stored as `BIGINT` in the currency's smallest unit (e.g
 
 ### Immutable ledger with status lifecycle
 
-Transaction amounts and entries are never updated or deleted; `status` is the single controlled mutable field, modeling a `PENDING → POSTED → VOIDED` state machine defined in [ADR-005](docs/adr/005-transaction-status-lifecycle.md). Voiding a transaction creates a paired reversal transaction with opposite entry signs via `POST /api/v1/transactions/{id}/void`; the original transaction remains in the ledger — and still counts toward balance — so the reversal is what nets the effect back to zero. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
+Transaction amounts and entries are never updated or deleted; `status` is the single controlled mutable field, modeling a `PENDING → POSTED → VOIDED` state machine. Voiding a transaction creates a paired reversal transaction with opposite entry signs via `POST /api/v1/transactions/{id}/void`; the original transaction remains in the ledger — and still counts toward balance — so the reversal is what nets the effect back to zero. → [ADR-005](docs/adr/005-transaction-status-lifecycle.md)
 
 ### Defense in depth: deferred constraint trigger
 
