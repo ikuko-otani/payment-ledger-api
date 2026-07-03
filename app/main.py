@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="payment-ledger-api",
+    description="Double-entry bookkeeping REST API with idempotent writes and an immutable audit trail.",
     version="0.1.0",
     debug=settings.debug,
     lifespan=lifespan,

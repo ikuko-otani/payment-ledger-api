@@ -50,11 +50,12 @@ The goal was not to build a toy CRUD app, but to implement the same invariants a
 | Migration | Alembic |
 | Auth | JWT (PyJWT) + bcrypt |
 | Observability | OpenTelemetry + Jaeger, structlog (JSON) |
-| Metrics | Prometheus + Grafana                     |
+| Metrics | Prometheus + Grafana |
 | CI | GitHub Actions |
 | Deploy | Fly.io |
 | Testing | pytest + testcontainers + Hypothesis (property-based) |
 | Package Manager | uv |
+
 ## Live Demo
 
 **Swagger UI**: [payment-ledger-api.fly.dev/docs](https://payment-ledger-api.fly.dev/docs)
@@ -68,7 +69,7 @@ The goal was not to build a toy CRUD app, but to implement the same invariants a
 | Email    | `demo@example.com` |
 | Password | `demo1234`         |
 
-**Swagger UI**: Click **Authorize** at the top of the page, enter the credentials above, and click **Authorize** — all subsequent requests will be authenticated automatically.
+**In the Swagger UI**: Click **Authorize** at the top of the page, enter the credentials above, and click **Authorize** — all subsequent requests will be authenticated automatically.
 
 **curl / API clients**: call `POST /api/v1/auth/login` to obtain a Bearer token, then pass it as `Authorization: Bearer <token>`.
 
