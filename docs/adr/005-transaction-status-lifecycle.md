@@ -34,18 +34,18 @@ PENDING ──► POSTED ──► VOIDED
 | Status | Meaning |
 |--------|---------|
 | `PENDING` | Created but not yet committed to the ledger. Entries do not affect balances. Reserved for future approval workflows.|
-| `POSTED` | Committed to the ledger. Entries affect balances. Immutable — never updated or deleted. |
-| `VOIDED` | Cancelled. A paired reversal transaction with opposite entry signs is created. The original transaction remains intact for audit purposes. |
+| `POSTED` | Committed to the ledger. Entries affect balances. Amounts and entries are immutable; only a controlled transition to `VOIDED` is permitted. |
+| `VOIDED` | Cancelled. A paired reversal transaction with opposite entry signs is created. The original transaction remains intact for audit purposes **and still counts toward balance** — it is the reversal, not exclusion, that nets the effect back to zero. |
 
 ## Rationale
 
-- **Immutability**: once POSTED, a transaction row is never UPDATE-d or DELETE-d
+- **Immutability**: amounts and entries are never UPDATE-d or DELETE-d; `status` is the single controlled mutable field, and its transitions form a state machine (`PENDING → POSTED → VOIDED`), not an arbitrary edit
 - **Auditability**: VOIDED transactions remain in the ledger with their original entries
 - **Extensibility**: PENDING state enables future approval / two-phase-commit workflows without schema changes
 
 ## Consequences
 
-- Balance queries must filter `WHERE status = 'POSTED'` to exclude voided entries
+- Balance queries must filter `WHERE status IN ('POSTED', 'VOIDED')` (only `PENDING` is excluded) — a void's paired reversal only nets to zero because the original stays balance-effective; excluding `VOIDED` entirely would leave a `-original` residual instead of `0`
 - Voiding a transaction creates a new reversal transaction (opposite entry signs), not a DELETE
 - `posted_at TIMESTAMPTZ` records the exact moment of the PENDING → POSTED transition
 

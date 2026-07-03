@@ -201,8 +201,10 @@ alongside the fingerprint) and slightly more complex error-handling logic.
 
 ### Immutable transaction log
 
-**Decision**: `transactions` and `entries` rows are never updated or deleted after
-`status = POSTED`. Corrections are modelled as new reversal transactions.
+**Decision**: `transactions` and `entries` rows have immutable amounts and
+directions after `status = POSTED`; the only permitted mutation is the
+`status` column's controlled transition to `VOIDED` (see [ADR-005](docs/adr/005-transaction-status-lifecycle.md)).
+Corrections are modelled as new reversal transactions, not edits to the original.
 
 **Rationale**: Immutability is the foundation of financial audit trails. Every
 balance at any point in time can be reconstructed by replaying the log. This also
@@ -733,6 +735,15 @@ that transaction (see `app/repositories/account_repository.py`, `app/core/redis.
 - *TTL as a safety net, not the primary mechanism*: a TTL is still set (so an
   orphaned key — e.g. one written just before a crash prevented invalidation —
   cannot live forever), but it is a backstop, not the invalidation strategy.
+- *Differentiated TTL for closed periods* (TD-052): `GET /accounts/{id}/balance`
+  uses a much longer TTL (`balance_cache_ttl_historical_seconds`, default 24h)
+  when `as_of` is a past date, versus the short default (`balance_cache_ttl_seconds`,
+  60s) when `as_of` is today. This is safe *because* invalidation is scoped to
+  the account, not the date: `create_transaction` and the void endpoint both
+  `scan_iter`-delete every `balance:{account_id}:*` key on write, so even a
+  late-arriving void whose reversal is dated into a "closed" period still busts
+  that period's cache entry immediately — the long TTL only reduces redundant
+  recomputation of a value that, absent such a write, was never going to change.
 
 **Trade-off**:
 - *Invalidation must enumerate every affected key*: because the cache key

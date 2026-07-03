@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 import pytest_asyncio
@@ -10,6 +11,7 @@ import redis.asyncio as aioredis
 from httpx import AsyncClient
 from testcontainers.redis import RedisContainer
 
+from app.core.config import settings
 from app.core.redis import get_redis_client
 from app.main import app as fastapi_app
 
@@ -229,3 +231,56 @@ async def test_post_transaction_invalidates_balance_cache(
 
     assert await redis_client.get(f"balance:{cash_id}:2026-01-31") is None
     assert await redis_client.get(f"balance:{revenue_id}:2026-01-31") is None
+
+
+@pytest.mark.asyncio
+async def test_balance_cache_ttl_longer_for_historical_date(
+    cached_client: AsyncClient,
+    redis_client: aioredis.Redis,  # type: ignore[type-arg]
+) -> None:
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1101",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    await cached_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2020-01-01T00:00:00"},
+    )
+
+    ttl = await redis_client.ttl(f"balance:{cash_id}:2020-01-01")
+    assert ttl > settings.balance_cache_ttl_seconds
+
+
+@pytest.mark.asyncio
+async def test_balance_cache_ttl_short_for_current_date(
+    cached_client: AsyncClient,
+    redis_client: aioredis.Redis,  # type: ignore[type-arg]
+) -> None:
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1101",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    today = date.today().isoformat()
+    await cached_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": f"{today}T00:00:00"},
+    )
+
+    ttl = await redis_client.ttl(f"balance:{cash_id}:{today}")
+    assert 0 < ttl <= settings.balance_cache_ttl_seconds

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, date, datetime
 
 import pytest
@@ -11,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account, AccountType
 from app.models.entry import Direction, Entry
 from app.models.transaction import Transaction, TransactionStatus
+from app.models.user import User, UserRole
 from app.repositories.account_repository import SQLAlchemyAccountRepository
+from app.repositories.audit_repository import SQLAlchemyAuditRepository
+from app.repositories.transaction_repository import SQLAlchemyTransactionRepository
+from app.services.transaction_service import void_transaction
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -117,53 +122,6 @@ async def test_balance_excludes_transaction_after_as_of(
 
 
 @pytest.mark.asyncio
-async def test_balance_excludes_voided_transaction(db_session: AsyncSession) -> None:
-    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
-    revenue = await _create_account(db_session, "4001", "Revenue", AccountType.REVENUE)
-
-    await _create_posted_transaction(
-        db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 10)
-    )
-
-    # VOIDED tx (within as_of range)
-    voided_tx = Transaction(
-        description="voided tx",
-        transaction_date=date(2026, 1, 15),
-        status=TransactionStatus.VOIDED,
-    )
-    db_session.add(voided_tx)
-    await db_session.flush()
-    db_session.add_all(
-        [
-            Entry(
-                transaction_id=voided_tx.id,
-                account_id=cash.id,
-                direction=Direction.DEBIT,
-                amount=200,
-                currency="EUR",
-                converted_amount_usd=200,
-            ),
-            Entry(
-                transaction_id=voided_tx.id,
-                account_id=revenue.id,
-                direction=Direction.CREDIT,
-                amount=200,
-                currency="EUR",
-                converted_amount_usd=200,
-            ),
-        ]
-    )
-    await db_session.commit()
-
-    result = await SQLAlchemyAccountRepository(db_session).calculate_balance(
-        cash.id, datetime(2026, 1, 31, tzinfo=UTC)
-    )
-    assert (
-        result == 1000
-    )  # assert only POSTED amount is in balance (VOIDED is excluded)
-
-
-@pytest.mark.asyncio
 async def test_balance_no_transactions_returns_zero(db_session: AsyncSession) -> None:
     # Create an account with no transactions
     cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
@@ -240,3 +198,83 @@ async def test_get_balance_endpoint_returns_correct_value(
     assert resp.status_code == 200
     assert resp.json()["balance"] == 2500
     assert resp.json()["currency"] == "EUR"
+
+
+@pytest.mark.asyncio
+async def test_balance_excludes_pending_transaction(db_session: AsyncSession) -> None:
+    """PENDING entries never affect balance. VOIDED entries do — see
+    test_balance_after_void_nets_to_zero for why: the original stays
+    balance-effective so the reversal can net it to zero by arithmetic."""
+    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
+    revenue = await _create_account(db_session, "4001", "Revenue", AccountType.REVENUE)
+
+    await _create_posted_transaction(
+        db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 10)
+    )
+
+    # PENDING tx (within as_of range) — must not affect balance
+    pending_tx = Transaction(
+        description="pending tx",
+        transaction_date=date(2026, 1, 15),
+        status=TransactionStatus.PENDING,
+    )
+    db_session.add(pending_tx)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Entry(
+                transaction_id=pending_tx.id,
+                account_id=cash.id,
+                direction=Direction.DEBIT,
+                amount=200,
+                currency="EUR",
+                converted_amount_usd=200,
+            ),
+            Entry(
+                transaction_id=pending_tx.id,
+                account_id=revenue.id,
+                direction=Direction.CREDIT,
+                amount=200,
+                currency="EUR",
+                converted_amount_usd=200,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await SQLAlchemyAccountRepository(db_session).calculate_balance(
+        cash.id, datetime(2026, 1, 31, tzinfo=UTC)
+    )
+    assert result == 1000  # PENDING is excluded; only POSTED/VOIDED count
+
+
+@pytest.mark.asyncio
+async def test_balance_after_void_nets_to_zero(db_session: AsyncSession) -> None:
+    cash = await _create_account(db_session, "1101", "Cash", AccountType.ASSET)
+    revenue = await _create_account(db_session, "4001", "Revenue", AccountType.REVENUE)
+
+    user_id = uuid.uuid4()
+    db_session.add(
+        User(
+            id=user_id,
+            email="void-balance-test@example.com",
+            hashed_password="",
+            role=UserRole.ADMIN,
+        )
+    )
+    await db_session.flush()
+
+    tx = await _create_posted_transaction(
+        db_session, cash, revenue, amount=1000, transaction_date=date(2026, 1, 10)
+    )
+
+    repo = SQLAlchemyAccountRepository(db_session)
+    as_of = datetime(2026, 1, 31, tzinfo=UTC)
+    assert await repo.calculate_balance(cash.id, as_of) == 1000
+
+    tx_repo = SQLAlchemyTransactionRepository(db_session)
+    audit_repo = SQLAlchemyAuditRepository(db_session)
+    await void_transaction(tx_repo, audit_repo, tx.id, user_id)
+    await db_session.commit()
+
+    assert await repo.calculate_balance(cash.id, as_of) == 0
