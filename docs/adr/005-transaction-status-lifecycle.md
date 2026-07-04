@@ -48,6 +48,12 @@ PENDING ──► POSTED ──► VOIDED
 - Balance queries must filter `WHERE status IN ('POSTED', 'VOIDED')` (only `PENDING` is excluded) — a void's paired reversal only nets to zero because the original stays balance-effective; excluding `VOIDED` entirely would leave a `-original` residual instead of `0`
 - Voiding a transaction creates a new reversal transaction (opposite entry signs), not a DELETE
 - `posted_at TIMESTAMPTZ` records the exact moment of the PENDING → POSTED transition
+- The `POSTED → VOIDED` transition is enforced atomically at the database
+  level via a conditional `UPDATE ... WHERE status = 'POSTED'` (compare-
+  and-swap), not by reading `status` in application code and writing
+  unconditionally. Two concurrent void requests for the same transaction
+  therefore resolve to exactly one success and one `409 Conflict`, never
+  two reversals.
 
 ## References
 
