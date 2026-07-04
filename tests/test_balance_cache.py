@@ -234,6 +234,72 @@ async def test_post_transaction_invalidates_balance_cache(
 
 
 @pytest.mark.asyncio
+async def test_void_transaction_invalidates_balance_cache(
+    cached_client: AsyncClient,
+    redis_client: aioredis.Redis,  # type: ignore[type-arg]
+) -> None:
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1103",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    resp = await cached_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "4003",
+            "name": "Revenue",
+            "account_type": "revenue",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    revenue_id = resp.json()["id"]
+
+    resp = await cached_client.post(
+        "/api/v1/transactions",
+        json={
+            "description": "void invalidation test",
+            "transaction_date": "2026-01-10",
+            "entries": [
+                {
+                    "account_id": cash_id,
+                    "direction": "debit",
+                    "amount": 700,
+                    "currency": "EUR",
+                },
+                {
+                    "account_id": revenue_id,
+                    "direction": "credit",
+                    "amount": 700,
+                    "currency": "EUR",
+                },
+            ],
+        },
+    )
+    assert resp.status_code == 201
+    transaction_id = resp.json()["id"]
+
+    await cached_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2026-01-31T00:00:00"},
+    )
+    assert await redis_client.get(f"balance:{cash_id}:2026-01-31") is not None
+
+    void_resp = await cached_client.post(f"/api/v1/transactions/{transaction_id}/void")
+    assert void_resp.status_code == 200
+
+    assert await redis_client.get(f"balance:{cash_id}:2026-01-31") is None
+    assert await redis_client.get(f"balance:{revenue_id}:2026-01-31") is None
+
+
+@pytest.mark.asyncio
 async def test_balance_cache_ttl_longer_for_historical_date(
     cached_client: AsyncClient,
     redis_client: aioredis.Redis,  # type: ignore[type-arg]
