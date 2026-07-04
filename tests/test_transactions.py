@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import date
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import event, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.exceptions import ConflictError, ValidationError
 from app.models.account import Account, AccountType
@@ -994,3 +995,56 @@ async def test_void_reversal_amounts_mirror_original(
 
     assert original_debit_total == reversal_credit_total
     assert original_credit_total == reversal_debit_total
+
+
+@pytest.mark.asyncio
+async def test_concurrent_void_returns_single_conflict(
+    engine: AsyncEngine,
+) -> None:
+    """Two concurrent void requests for the same transaction must resolve to
+    exactly one success and one 409 — not two reversals.
+
+    Regression guard for the check-then-write race described in ADR-002's
+    "Where row-level protection IS used" note: without the CAS-based
+    mark_voided_if_posted, both requests could read status == POSTED before
+    either commits, producing two reversal transactions and a net balance
+    of -original instead of 0.
+    """
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async with session_factory() as setup_session:
+        tx, user_id = await _create_posted_transaction(setup_session, "9000", "9001")
+        transaction_id = tx.id
+
+    async def _attempt() -> tuple[Transaction, Transaction] | ConflictError:
+        async with session_factory() as session:
+            tx_repo = SQLAlchemyTransactionRepository(session)
+            audit_repo = SQLAlchemyAuditRepository(session)
+            try:
+                result = await void_transaction(
+                    tx_repo, audit_repo, transaction_id, user_id
+                )
+                await session.commit()
+                assert result is not None
+                return result
+            except ConflictError as e:
+                await session.rollback()
+                return e
+
+    results = await asyncio.gather(_attempt(), _attempt())
+
+    successes = [r for r in results if not isinstance(r, ConflictError)]
+    conflicts = [r for r in results if isinstance(r, ConflictError)]
+    assert len(successes) == 1
+    assert len(conflicts) == 1
+
+    async with session_factory() as check_session:
+        result = await check_session.execute(select(Transaction))
+        reversals = [
+            t
+            for t in result.scalars().all()
+            if t.metadata_ == {"reversal_of": str(transaction_id)}
+        ]
+        assert len(reversals) == 1
