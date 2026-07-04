@@ -66,6 +66,12 @@ Key arguments for computed balance in this system:
 - **Unique constraints**: `users.email` and `currencies.code` uniqueness is
   enforced by PostgreSQL `UNIQUE` indexes. Concurrent duplicates are caught
   via `try/except IntegrityError` (optimistic, DB-enforced).
+- **Void status transition**: `void_transaction` uses a conditional
+  `UPDATE transactions SET status = 'VOIDED' WHERE id = :id AND status =
+  'POSTED'` (a compare-and-swap) rather than a plain SELECT-then-UPDATE.
+  This is the one write path in the system where a prior read cannot be
+  trusted by the time of the write — see
+  [ADR-005](005-transaction-status-lifecycle.md#consequences).
 
 ## Consequences
 

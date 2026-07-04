@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from typing import Any, cast
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
 from app.models.entry import Entry
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionStatus
 
 
 class TransactionRepository(ABC):
@@ -28,6 +30,9 @@ class TransactionRepository(ABC):
     async def find_by_id_with_entries(
         self, transaction_id: uuid.UUID
     ) -> Transaction | None: ...
+
+    @abstractmethod
+    async def mark_voided_if_posted(self, transaction_id: uuid.UUID) -> bool: ...
 
 
 class SQLAlchemyTransactionRepository(TransactionRepository):
@@ -73,6 +78,17 @@ class SQLAlchemyTransactionRepository(TransactionRepository):
             .options(selectinload(Transaction.entries))
         )
         return result.scalar_one_or_none()
+
+    async def mark_voided_if_posted(self, transaction_id: uuid.UUID) -> bool:
+        result = await self._db.execute(
+            update(Transaction)
+            .where(
+                Transaction.id == transaction_id,
+                Transaction.status == TransactionStatus.POSTED,
+            )
+            .values(status=TransactionStatus.VOIDED)
+        )
+        return cast(CursorResult[Any], result).rowcount == 1
 
 
 def get_transaction_repository(
