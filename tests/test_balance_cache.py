@@ -284,3 +284,91 @@ async def test_balance_cache_ttl_short_for_current_date(
 
     ttl = await redis_client.ttl(f"balance:{cash_id}:{today}")
     assert 0 < ttl <= settings.balance_cache_ttl_seconds
+
+
+@pytest_asyncio.fixture()
+async def broken_redis_client() -> aioredis.Redis:  # type: ignore[type-arg]
+    """A Redis client pointing at an address with nothing listening, to
+    simulate Redis being unreachable. socket_connect_timeout keeps the
+    failure fast instead of hanging on OS-level TCP retries.
+    """
+    client: aioredis.Redis = aioredis.from_url(  # type: ignore[type-arg]
+        "redis://localhost:1",
+        encoding="utf-8",
+        decode_responses=True,
+        socket_connect_timeout=1,
+    )
+    yield client
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_balance_reads_from_db_when_redis_unavailable(
+    async_client: AsyncClient,
+    broken_redis_client: aioredis.Redis,  # type: ignore[type-arg]
+) -> None:
+    """GET /accounts/{id}/balance must still return the correct balance from
+    PostgreSQL when Redis is unreachable, not a 500 (N-4 regression guard for
+    the try/except added around redis.get/set in get_account_balance).
+    """
+    resp = await async_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "1102",
+            "name": "Cash",
+            "account_type": "asset",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    cash_id = resp.json()["id"]
+
+    resp = await async_client.post(
+        "/api/v1/accounts",
+        json={
+            "code": "4002",
+            "name": "Revenue",
+            "account_type": "revenue",
+            "currency": "EUR",
+        },
+    )
+    assert resp.status_code == 201
+    revenue_id = resp.json()["id"]
+
+    resp = await async_client.post(
+        "/api/v1/transactions",
+        json={
+            "description": "redis down test",
+            "transaction_date": "2026-01-10",
+            "entries": [
+                {
+                    "account_id": cash_id,
+                    "direction": "debit",
+                    "amount": 1500,
+                    "currency": "EUR",
+                },
+                {
+                    "account_id": revenue_id,
+                    "direction": "credit",
+                    "amount": 1500,
+                    "currency": "EUR",
+                },
+            ],
+        },
+    )
+    assert resp.status_code == 201
+
+    # Only now switch Redis to the broken client — the GET below is the one
+    # code path we actually fixed (get_account_balance's try/except).
+    async def override_get_redis_client():
+        yield broken_redis_client
+
+    fastapi_app.dependency_overrides[get_redis_client] = override_get_redis_client
+
+    resp = await async_client.get(
+        f"/api/v1/accounts/{cash_id}/balance",
+        params={"as_of": "2026-01-10T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["balance"] == 1500
+    assert resp.json()["currency"] == "EUR"

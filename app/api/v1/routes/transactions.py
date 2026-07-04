@@ -5,8 +5,11 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import AdminUser, AuditorOrAdminUser
@@ -31,6 +34,7 @@ from app.schemas.transaction import TransactionCreate, TransactionRead, VoidResp
 from app.services.transaction_service import create_transaction, void_transaction
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
+logger = structlog.get_logger(__name__)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 AccountRepoDep = Annotated[AccountRepository, Depends(get_account_repository)]
@@ -39,6 +43,25 @@ TransactionRepoDep = Annotated[
     TransactionRepository, Depends(get_transaction_repository)
 ]
 AuditRepoDep = Annotated[AuditRepository, Depends(get_audit_repository)]
+
+
+async def _invalidate_balance_cache(
+    redis: RedisDep, account_ids: set[uuid.UUID]
+) -> None:
+    try:
+        for account_id in account_ids:
+            pattern = f"balance:{account_id}:*"
+            keys_to_delete: list[str] = []
+            # count=100: keyspace is small (hundreds~thousands); 1-2 round trips suffice
+            async for key in redis.scan_iter(match=pattern, count=100):
+                keys_to_delete.append(key)
+            if keys_to_delete:
+                await redis.delete(*keys_to_delete)
+    except (RedisConnectionError, RedisTimeoutError):
+        logger.warning(
+            "balance_cache_invalidation_failed",
+            account_ids=[str(a) for a in account_ids],
+        )
 
 
 @router.get("", response_model=list[TransactionRead])
@@ -70,14 +93,8 @@ async def post_transaction(
         account_repo, currency_repo, tx_repo, audit_repo, payload, current_user.id
     )
     await db.commit()
-    for entry in payload.entries:
-        pattern = f"balance:{entry.account_id}:*"
-        keys_to_delete: list[str] = []
-        # count=100: keyspace is small (hundreds~thousands); 1-2 round trips suffice
-        async for key in redis.scan_iter(match=pattern, count=100):
-            keys_to_delete.append(key)
-        if keys_to_delete:
-            await redis.delete(*keys_to_delete)
+    account_ids = {entry.account_id for entry in payload.entries}
+    await _invalidate_balance_cache(redis, account_ids)
 
     response_data = TransactionRead.model_validate(transaction).model_dump(mode="json")
     await idempotency.cache(response_data)
@@ -103,13 +120,7 @@ async def void_transaction_endpoint(
 
     # Invalidate balance cache for all accounts affected by the original entries
     affected_account_ids = {entry.account_id for entry in voided.entries}
-    for account_id in affected_account_ids:
-        pattern = f"balance:{account_id}:*"
-        keys_to_delete: list[str] = []
-        async for key in redis.scan_iter(match=pattern, count=100):
-            keys_to_delete.append(key)
-        if keys_to_delete:
-            await redis.delete(*keys_to_delete)
+    await _invalidate_balance_cache(redis, affected_account_ids)
 
     return VoidResponse(
         voided_transaction=TransactionRead.model_validate(voided),
