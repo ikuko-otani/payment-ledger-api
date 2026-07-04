@@ -25,9 +25,11 @@ Three approaches were considered:
 
 Use **computed balance** (option 3).
 
-Balance is calculated on demand by aggregating all `POSTED` entries for a given
-account (`AccountRepository.calculate_balance`). The `accounts` table has no
-`balance` column.
+Balance is calculated on demand by aggregating all balance-effective
+(`POSTED`/`VOIDED`) entries for a given account
+(`AccountRepository.calculate_balance`) — only `PENDING` is excluded
+(see [ADR-005](005-transaction-status-lifecycle.md#consequences)).
+The `accounts` table has no `balance` column.
 
 Transaction writes (`POST /transactions`) do not lock any account rows. Each
 write inserts a new `Transaction` + `Entry` set within a single PostgreSQL
