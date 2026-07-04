@@ -68,7 +68,7 @@ async def get_account_balance(
     _current_user: AuditorOrAdminUser,
 ) -> BalanceResponse:
     cache_key = f"balance:{id}:{as_of.date()}"
-    cached: str | None = None
+    cached: bytes | str | None = None
     try:
         cached = await redis.get(cache_key)
     except (RedisConnectionError, RedisTimeoutError):
