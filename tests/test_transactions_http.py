@@ -456,3 +456,45 @@ async def test_void_nonexistent_transaction_returns_404(
     fake_id = "00000000-0000-0000-0000-000000000000"
     resp = await async_client.post(f"/api/v1/transactions/{fake_id}/void")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_post_then_void_nets_balance_to_zero_via_http(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """End-to-end regression guard for TD-051: POST a transaction, confirm
+    the balance reflects it, void it, and confirm the balance nets back to
+    zero — exercised through the full HTTP route (POST -> GET balance ->
+    void -> GET balance), not just the service layer already covered by
+    tests/test_balance.py::test_balance_after_void_nets_to_zero.
+    """
+    debit_id = await _seed_account(
+        db_session, "Cash-VoidE2E", AccountType.ASSET, code="2102"
+    )
+    credit_id = await _seed_account(
+        db_session, "Revenue-VoidE2E", AccountType.REVENUE, code="5102"
+    )
+
+    post_resp = await async_client.post(
+        "/api/v1/transactions", json=_void_payload_base(debit_id, credit_id)
+    )
+    assert post_resp.status_code == 201
+    tx_id = post_resp.json()["id"]
+
+    balance_resp = await async_client.get(
+        f"/api/v1/accounts/{debit_id}/balance",
+        params={"as_of": "2024-06-01T00:00:00"},
+    )
+    assert balance_resp.status_code == 200
+    assert balance_resp.json()["balance"] == 5000
+
+    void_resp = await async_client.post(f"/api/v1/transactions/{tx_id}/void")
+    assert void_resp.status_code == 200
+
+    balance_resp = await async_client.get(
+        f"/api/v1/accounts/{debit_id}/balance",
+        params={"as_of": "2024-06-01T00:00:00"},
+    )
+    assert balance_resp.status_code == 200
+    assert balance_resp.json()["balance"] == 0
