@@ -54,6 +54,19 @@ PENDING ──► POSTED ──► VOIDED
   unconditionally. Two concurrent void requests for the same transaction
   therefore resolve to exactly one success and one `409 Conflict`, never
   two reversals.
+- The reversal transaction created on void inherits `original.transaction_date`
+  (see `transaction_service.py`), not the void operation's own date. This means
+  voiding erases the original transaction's effect from every `as_of` point in
+  time, including past ones — the paired reversal always nets to zero at any
+  historical balance query, not just from the void date forward. This is a
+  deliberate choice favoring pair symmetry and point-in-time consistency over
+  the period-closing convention used by systems with a formal close (e.g.,
+  SAP-style reversals that post on the *current* period's date, leaving
+  closed-period balances untouched). This system has no period-close concept
+  today; if one is introduced, voiding a transaction dated in a closed period
+  should be revisited — either the reversal should use the void date (or
+  current period date) instead, or closed-period balances should be locked
+  against further mutation entirely.
 
 ## References
 
