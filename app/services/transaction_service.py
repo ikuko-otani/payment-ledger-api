@@ -218,9 +218,6 @@ async def void_transaction(
     if original is None:
         return None  # caller must check
 
-    if original.status == TransactionStatus.VOIDED:
-        raise ConflictError(detail=f"Transaction {transaction_id} is already voided")
-
     before_value: dict[str, Any] = {
         "id": str(original.id),
         "status": original.status.value,
@@ -228,7 +225,15 @@ async def void_transaction(
         "transaction_date": str(original.transaction_date),
     }
 
-    # Mark original as VOIDED (immutable row stays, only status changes)
+    # Atomic CAS: only succeeds if status was still POSTED at write time.
+    # Guards against the TOCTOU race where two concurrent voids both pass
+    # a plain status check before either commits (see ADR-002).
+    voided = await tx_repo.mark_voided_if_posted(transaction_id)
+    if not voided:
+        raise ConflictError(detail=f"Transaction {transaction_id} is already voided")
+
+    # Keep the in-memory object in sync with the DB write above, since the
+    # Core-style UPDATE does not update the already-loaded ORM instance.
     original.status = TransactionStatus.VOIDED
 
     # Build reversal transaction with opposite entry directions
