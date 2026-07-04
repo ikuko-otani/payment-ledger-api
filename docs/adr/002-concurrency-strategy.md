@@ -45,9 +45,11 @@ transaction at the default `READ COMMITTED` isolation level.
 
 Key arguments for computed balance in this system:
 
-- **Entries are append-only.** Transactions are never updated or deleted
-  (see [ADR-005](005-transaction-status-lifecycle.md)). This means the
-  aggregate query over entries is deterministic — it reads immutable data.
+- **Entries are append-only.** Entry rows are never updated or deleted; on
+  the transaction header only the controlled `status` transition is
+  permitted (see [ADR-005](005-transaction-status-lifecycle.md)). This
+  means the aggregate query over entries is deterministic — it reads
+  immutable data.
 - **No write-write conflict.** Two concurrent `POST /transactions` each
   `INSERT` their own rows. PostgreSQL handles row-level insert concurrency
   natively; no explicit locking is needed.
