@@ -7,7 +7,10 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app.core.config import settings
 from app.core.deps import AdminUser, AuditorOrAdminUser
@@ -26,6 +29,7 @@ from app.schemas.account import AccountCreate, AccountRead, BalanceResponse
 from app.services import account_service
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+logger = structlog.get_logger(__name__)
 
 AccountRepoDep = Annotated[AccountRepository, Depends(get_account_repository)]
 AuditRepoDep = Annotated[AuditRepository, Depends(get_audit_repository)]
@@ -64,7 +68,12 @@ async def get_account_balance(
     _current_user: AuditorOrAdminUser,
 ) -> BalanceResponse:
     cache_key = f"balance:{id}:{as_of.date()}"
-    cached = await redis.get(cache_key)
+    cached: str | None = None
+    try:
+        cached = await redis.get(cache_key)
+    except (RedisConnectionError, RedisTimeoutError):
+        logger.warning("balance_cache_read_failed", cache_key=cache_key)
+
     if cached is not None:
         data = json.loads(cached)
         return BalanceResponse(
@@ -82,9 +91,13 @@ async def get_account_balance(
         if as_of.date() < date.today()
         else settings.balance_cache_ttl_seconds
     )
-    await redis.set(
-        cache_key,
-        json.dumps({"balance": int(balance), "currency": account.currency}),
-        ex=ttl,
-    )
+    try:
+        await redis.set(
+            cache_key,
+            json.dumps({"balance": int(balance), "currency": account.currency}),
+            ex=ttl,
+        )
+    except (RedisConnectionError, RedisTimeoutError):
+        logger.warning("balance_cache_write_failed", cache_key=cache_key)
+
     return BalanceResponse(balance=balance, currency=account.currency, as_of=as_of)
