@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-An immutable ledger never deletes or updates posted transactions (ADR-004).
+An immutable ledger never deletes or updates posted transactions.
 However, real-world accounting requires a way to cancel a transaction — for
 example, when an invoice is disputed or a payment is reversed.
 Without a status field, cancellation would require physical deletion,
@@ -45,15 +45,24 @@ PENDING ──► POSTED ──► VOIDED
 
 ## Consequences
 
-- Balance queries must filter `WHERE status IN ('POSTED', 'VOIDED')` (only `PENDING` is excluded) — a void's paired reversal only nets to zero because the original stays balance-effective; excluding `VOIDED` entirely would leave a `-original` residual instead of `0`
-- Voiding a transaction creates a new reversal transaction (opposite entry signs), not a DELETE
+- **Enforcement layer**: this immutability rule is enforced by the application layer
+  (no update/delete endpoints exist for `transactions` or `entries`) and by convention
+  documented here — it is **not** additionally backstopped by a database-level
+  `REVOKE`/trigger today. See ADR-007's Trade-offs (the balance trigger fires on
+  `INSERT` only and does not guard `UPDATE`/`DELETE`) and TD-055 for the tracked gap.
+- Balance queries must filter `WHERE status IN ('POSTED', 'VOIDED')`
+  (only `PENDING` is excluded) — a void's paired reversal only nets to zero
+  because the original stays balance-effective; excluding `VOIDED` entirely would leave
+  a `-original` residual instead of `0`
+- Voiding a transaction creates a new reversal transaction (opposite entry signs),
+  not a DELETE
 - `posted_at TIMESTAMPTZ` records the exact moment of the PENDING → POSTED transition
-- The `POSTED → VOIDED` transition is enforced atomically at the database
-  level via a conditional `UPDATE ... WHERE status = 'POSTED'` (compare-
-  and-swap), not by reading `status` in application code and writing
-  unconditionally. Two concurrent void requests for the same transaction
-  therefore resolve to exactly one success and one `409 Conflict`, never
-  two reversals.
+- Within the application's own write path, the `POSTED → VOIDED` transition is
+  enforced atomically at the database level via a conditional
+  `UPDATE ... WHERE status = 'POSTED'` (compare-and-swap), not by reading
+  `status` in application code and writing unconditionally. Two concurrent
+  void requests for the same transaction therefore resolve to exactly one
+  success and one `409 Conflict`, never two reversals.
 - The reversal transaction created on void inherits `original.transaction_date`
   (see `transaction_service.py`), not the void operation's own date. This means
   voiding erases the original transaction's effect from every `as_of` point in
@@ -73,4 +82,4 @@ PENDING ──► POSTED ──► VOIDED
 - [Double-entry bookkeeping — voiding transactions](https://en.wikipedia.org/wiki/Double-entry_bookkeeping)
 - Implementation: `app/models/transaction.py`, `app/services/transaction_service.py`
   - Void endpoint: `app/api/v1/routes/transactions.py` — `POST /transactions/{id}/void`
-- Related: ADR-003 (accounting date), ADR-004 (immutable log)
+- Related: ADR-003 (accounting date), ADR-007 (balance trigger enforcement boundary)
