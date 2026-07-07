@@ -39,9 +39,12 @@ PENDING ──► POSTED ──► VOIDED
 
 ## Rationale
 
-- **Immutability**: amounts and entries are never UPDATE-d or DELETE-d; `status` is the single controlled mutable field, and its transitions form a state machine (`PENDING → POSTED → VOIDED`), not an arbitrary edit
+- **Immutability**: amounts and entries are never UPDATE-d or DELETE-d;
+  `status` is the single controlled mutable field, and its transitions form a state machine
+  (`PENDING → POSTED → VOIDED`), not an arbitrary edit
 - **Auditability**: VOIDED transactions remain in the ledger with their original entries
-- **Extensibility**: PENDING state enables future approval / two-phase-commit workflows without schema changes
+- **Extensibility**: PENDING state enables future approval / two-phase-commit workflows
+  without schema changes
 
 ## Consequences
 
