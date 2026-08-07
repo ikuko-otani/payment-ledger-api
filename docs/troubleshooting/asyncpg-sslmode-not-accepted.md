@@ -30,6 +30,7 @@ via `connect_args`:
 ```python
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
+
 def _asyncpg_url(url: str) -> tuple[str, dict[str, object]]:
     parts = urlsplit(url)
     connect_args: dict[str, object] = {}
@@ -41,6 +42,7 @@ def _asyncpg_url(url: str) -> tuple[str, dict[str, object]]:
         cleaned = urlencode(qs, doseq=True)
         parts = parts._replace(query=cleaned)
     return urlunsplit(parts), connect_args
+
 
 url, connect_args = _asyncpg_url(settings.database_url)
 engine = create_async_engine(url, connect_args=connect_args)

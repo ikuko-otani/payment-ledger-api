@@ -71,10 +71,9 @@ EOF
 - Normalize URLs in `tests/conftest.py`:
 
 ```python
-sync_url = (
-    raw_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
-    .replace("postgresql://", "postgresql+psycopg://", 1)
-)
+sync_url = raw_url.replace(
+    "postgresql+psycopg2://", "postgresql+psycopg://", 1
+).replace("postgresql://", "postgresql+psycopg://", 1)
 async_url = sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
 ```
 

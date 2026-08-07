@@ -15,7 +15,7 @@ create enums using Python enum member **names** (uppercase), not values
 
 ```python
 # Migration creates: ENUM ('ADMIN', 'AUDITOR')
-sa.Enum('ADMIN', 'AUDITOR', name='userrole')
+sa.Enum("ADMIN", "AUDITOR", name="userrole")
 ```
 
 SQLAlchemy ORM handles the name-to-value mapping automatically, but raw SQL
