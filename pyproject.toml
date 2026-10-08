@@ -19,7 +19,7 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.43.0",
   "pyjwt>=2.15.0",
   "python-multipart>=0.0.32",
-  "prometheus-fastapi-instrumentator>=8.0.2",
+  "prometheus-fastapi-instrumentator>=8.1.0",
 ]
 
 [dependency-groups]
