@@ -17,7 +17,7 @@ dependencies = [
   "opentelemetry-instrumentation-fastapi>=0.64b0",
   "opentelemetry-instrumentation-sqlalchemy>=0.64b0",
   "opentelemetry-exporter-otlp-proto-grpc>=1.43.0",
-  "pyjwt>=2.13.0",
+  "pyjwt>=2.15.0",
   "python-multipart>=0.0.32",
   "prometheus-fastapi-instrumentator>=8.0.2",
 ]
